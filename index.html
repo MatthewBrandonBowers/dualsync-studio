@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>DualSync Studio</title>
-  <link rel="stylesheet" href="./styles.css?v=12" />
+  <link rel="stylesheet" href="./styles.css?v=13" />
 </head>
 <body>
   <!-- TOP HEADER BAR -->
@@ -58,13 +58,13 @@
         ⇄ <span id="flipLrLabel">A | B</span>
       </button>
 
-      <!-- Enable Both Cameras at the Same Time (even on single-POV cuts) -->
-      <div class="both-cams-control-group" title="Show both players' cameras simultaneously even when a cut is set to a single POV (A or B)">
-        <label class="fio-toggle-chip both-cams-chip">
-          <input id="chkBothCamsAlways" type="checkbox" checked />
-          <span>👁️ Both Cams</span>
+      <!-- Enable Both Cameras on Current Clip / Cut Only -->
+      <div class="both-cams-control-group" title="Add or remove Dual Camera on the current clip/cut only (does not affect the rest of the video)">
+        <label class="fio-toggle-chip both-cams-chip" title="Toggle Dual Camera on the current clip/cut only (Key B)">
+          <input id="chkBothCamsAlways" type="checkbox" />
+          <span id="topBothCamsLabel">👁️ Clip Dual Cam</span>
         </label>
-        <select id="selectBothCamsMode" class="both-cams-mode-select" title="How to display both cameras during a single-POV cut">
+        <select id="selectBothCamsMode" class="both-cams-mode-select" title="How to display both cameras when Dual Cam is enabled on a clip">
           <option value="facecam_natural" selected>🎯 Natural POV Spots (Lee Left · Matt Right)</option>
           <option value="facecam_dual">🎯 Side-by-Side Facecams</option>
           <option value="facecam_top_center">🎯 Top-Center Facecams</option>
@@ -308,15 +308,15 @@
             <span class="cam-key">3</span>
             <span class="cam-title">🟪 B</span>
           </button>
-          <button id="btnDeckFlipLR" class="cam-switcher-btn cam-flip" type="button" title="Flip Left & Right cameras (Key F)">
+          <button id="btnDeckFlipLR" class="cam-switcher-btn cam-flip" type="button" title="Flip Left & Right cameras on this clip/cut only (Key F)">
             <span class="cam-key">F</span>
             <span id="deckFlipTitle" class="cam-title">⇄ A|B</span>
           </button>
-          <button id="btnDeckBothCams" class="cam-switcher-btn cam-both tally-active" type="button" title="Enable both cameras at the same time even on single-POV cuts (Key B)">
+          <button id="btnDeckBothCams" class="cam-switcher-btn cam-both" type="button" title="Add/Remove Dual Camera on this clip/cut only (Key B)">
             <span class="cam-key">B</span>
-            <span id="deckBothTitle" class="cam-title">👁️ Both</span>
+            <span id="deckBothTitle" class="cam-title">👁️ Dual Cam</span>
           </button>
-          <label class="live-punch-toggle" title="Pressing 1/2/3 while playing auto-splits a new cut at the playhead">
+          <label class="live-punch-toggle" title="Pressing 1/2/3/B while playing auto-splits a new cut at the playhead">
             <input id="chkLivePunchCut" type="checkbox" checked />
             <span>🔴 Punch</span>
           </label>
@@ -330,7 +330,7 @@
           <button id="btnCyclePov" class="btn btn-ghost btn-xs hidden" title="Cycle POV (V)">🎥</button>
           <button id="btnTogglePlaybackPopover" class="btn btn-playback-pill btn-xs" title="Video Quality & Playback Settings">
             ⚙️ Playback
-            <span id="playbackQualityBadge" class="playback-pill-badge">540p</span>
+            <span id="playbackQualityBadge" class="playback-pill-badge">1080p60</span>
           </button>
           <button id="btnToggleVoiceMixer" class="btn btn-mixer-pill btn-xs" title="Audio Mixer">
             🎚️ Audio
@@ -348,9 +348,9 @@
         <div class="tuner-group">
           <span class="tuner-label">🎬 Quality:</span>
           <div class="tuner-pill-row" id="qualityPillRow">
-            <button type="button" class="tuner-pill" data-quality="1080p" title="Original 1080p60 Source">1080p60</button>
+            <button type="button" class="tuner-pill active" data-quality="1080p" title="Original 1080p60 Source">1080p60</button>
             <button type="button" class="tuner-pill" data-quality="720p" title="720p @ 30fps HD Proxy">720p HD</button>
-            <button type="button" class="tuner-pill active" data-quality="540p" title="540p @ 30fps Smooth Proxy">540p</button>
+            <button type="button" class="tuner-pill" data-quality="540p" title="540p @ 30fps Smooth Proxy">540p</button>
             <button type="button" class="tuner-pill" data-quality="360p" title="360p @ 30fps Ultra-Light">360p</button>
           </div>
         </div>
@@ -830,6 +830,6 @@
     </div>
   </div>
 
-  <script src="./app.js?v=12"></script>
+  <script src="./app.js?v=13"></script>
 </body>
 </html>

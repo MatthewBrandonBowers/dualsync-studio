@@ -607,11 +607,23 @@ let lastUiPov = "";
 let timelineMode = "scene";
 let lockedTimelineWindow = null;
 
-// Co-Op Left/Right Flip, Both Cameras (Facecams) Always-On & 9:16 Shorts Formatting State
-let isFlippedLR = localStorage.getItem("dualsync_flipped_lr") === "1";
-let bothCamsEnabled = localStorage.getItem("dualsync_both_cams_enabled") !== "0";
+// Co-Op Left/Right Flip, Per-Clip Dual Cameras (Facecams) & 9:16 Shorts Formatting State
+let isFlippedLR = false;
+let bothCamsEnabled = false;
 let bothCamsMode = localStorage.getItem("dualsync_both_cams_mode_v3") || "facecam_natural";
 let facecamShowBorder = localStorage.getItem("dualsync_facecam_border_v1") === "1";
+
+function isCutDualCamEnabled(cut, hl = null) {
+  if (cut && cut.both_cams != null) return Boolean(cut.both_cams);
+  if (hl && hl.both_cams != null) return Boolean(hl.both_cams);
+  return false;
+}
+
+function isCutFlippedLR(cut, hl = null) {
+  if (cut && cut.flip_lr != null) return Boolean(cut.flip_lr);
+  if (hl && hl.flip_lr != null) return Boolean(hl.flip_lr);
+  return false;
+}
 let isShortsMode = false;
 let shortsLayout = "facecams_gameplay";
 let shortsPanA = 50;
@@ -653,16 +665,22 @@ function resetFacecamBoxInlineStyles() {
 
 function drawCroppedVideoToCanvas(videoEl, crop, canvasEl) {
   if (!videoEl || !canvasEl || videoEl.readyState < 2) return;
-  const vw = videoEl.videoWidth || 1280;
-  const vh = videoEl.videoHeight || 720;
+  const vw = videoEl.videoWidth || 1920;
+  const vh = videoEl.videoHeight || 1080;
   const sx = Math.max(0, Math.min(vw - 4, (crop.x / 100) * vw));
   const sy = Math.max(0, Math.min(vh - 4, (crop.y / 100) * vh));
   const sw = Math.max(4, Math.min(vw - sx, (crop.w / 100) * vw));
   const sh = Math.max(4, Math.min(vh - sy, (crop.h / 100) * vh));
+  const targetW = Math.max(64, Math.min(640, Math.round(sw)));
+  const targetH = Math.max(64, Math.min(640, Math.round(sh)));
+  if (canvasEl.width !== targetW || canvasEl.height !== targetH) {
+    canvasEl.width = targetW;
+    canvasEl.height = targetH;
+  }
   const ctx = canvasEl.getContext("2d");
   if (!ctx) return;
   try {
-    ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, canvasEl.width, canvasEl.height);
+    ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, targetW, targetH);
   } catch (_) {}
 }
 
@@ -733,6 +751,15 @@ function updateFlipAndBothCamsUI(effFlip = isFlippedLR, effBoth = bothCamsEnable
   document.getElementById("btnDeckFlipLR")?.classList.toggle("tally-active", Boolean(effFlip));
   document.getElementById("btnDeckBothCams")?.classList.toggle("tally-active", Boolean(effBoth));
 
+  const topBothLbl = document.getElementById("topBothCamsLabel");
+  if (topBothLbl) {
+    topBothLbl.textContent = effBoth ? "👁️ Clip Dual Cam: ON" : "👁️ Clip Dual Cam";
+  }
+  const deckBothTitle = document.getElementById("deckBothTitle");
+  if (deckBothTitle) {
+    deckBothTitle.textContent = effBoth ? "👁️ Dual: ON" : "👁️ Dual Cam";
+  }
+
   const chkBoth = document.getElementById("chkBothCamsAlways");
   if (chkBoth && chkBoth.checked !== Boolean(effBoth)) chkBoth.checked = Boolean(effBoth);
   ["selectBothCamsMode", "settingsFacecamPlacement", "modalSelectFacecamPlacement"].forEach((id) => {
@@ -750,14 +777,10 @@ function updateDirectorViewportUI(t) {
   const activeInfo = getActiveCutAtTime(t);
   const pov = activeInfo ? activeInfo.cut.active_pov : "A";
 
-  const effFlip =
-    activeInfo && activeInfo.cut && activeInfo.cut.flip_lr != null
-      ? Boolean(activeInfo.cut.flip_lr)
-      : isFlippedLR;
-  const effBoth =
-    activeInfo && activeInfo.cut && activeInfo.cut.both_cams != null
-      ? Boolean(activeInfo.cut.both_cams)
-      : bothCamsEnabled;
+  const effFlip = isShortsMode
+    ? Boolean(isFlippedLR)
+    : isCutFlippedLR(activeInfo?.cut, activeInfo?.highlight);
+  const effBoth = isCutDualCamEnabled(activeInfo?.cut, activeInfo?.highlight);
 
   const isFacecamMode = bothCamsMode.startsWith("facecam_");
   const showPip =
@@ -1045,7 +1068,7 @@ let lastHardSeekMsAudio = 0;
 let lastRateNudgeMsA = 0;
 let lastRateNudgeMsB = 0;
 
-let currentVideoQuality = localStorage.getItem("dualsync_video_quality") || "540p";
+let currentVideoQuality = localStorage.getItem("dualsync_video_quality_v2") || "1080p";
 let syncEngineMode = localStorage.getItem("dualsync_sync_engine") || "free_run";
 let driftToleranceSec = parseFloat(localStorage.getItem("dualsync_drift_tol") || "0.55");
 let userPlaybackSpeed = 1.0;
@@ -1625,13 +1648,17 @@ function renderHighlightsList() {
     const nameA = el.playerAName?.value || "A";
     const nameB = el.playerBName?.value || "B";
 
+    const sceneHasBothCams =
+      Boolean(hl.both_cams) || (hl.camera_cuts || []).some((c) => Boolean(c.both_cams));
+
     const cutsHtml = (hl.camera_cuts || [])
-      .map(
-        (c, cIdx) =>
-          `<span class="cut-chip pov-${c.active_pov}" data-hl="${hlIdx}" data-cut="${cIdx}" title="${c.reason || ""} (Click to switch POV)">
-            ${c.active_pov === "SPLIT" ? "⚡" : c.active_pov === "A" ? "🟦" : "🟪"} ${formatTime(c.start_sec)}–${formatTime(c.end_sec)}
-          </span>`
-      )
+      .map((c, cIdx) => {
+        const cutBoth = isCutDualCamEnabled(c, hl);
+        return `<span class="cut-chip pov-${c.active_pov} ${cutBoth ? "has-both-cams" : ""}" data-hl="${hlIdx}" data-cut="${cIdx}" title="${c.reason || ""} (Click to switch POV)">
+            <span>${c.active_pov === "SPLIT" ? "⚡" : c.active_pov === "A" ? "🟦" : "🟪"} ${formatTime(c.start_sec)}–${formatTime(c.end_sec)}</span>
+            <button type="button" class="cut-both-toggle ${cutBoth ? "active" : ""}" data-both-hl="${hlIdx}" data-both-cut="${cIdx}" title="Toggle Dual Camera on this cut only">👁️</button>
+          </span>`;
+      })
       .join("");
 
     const thumbHtml = hl.thumbnail_url
@@ -1657,7 +1684,12 @@ function renderHighlightsList() {
           </div>
           <div class="hl-meta-row">
             <span>${formatTime(hl.start_sec)} – ${formatTime(hl.end_sec)} (<strong>${durSec}s</strong>)</span>
-            <button class="btn btn-xs btn-secondary" data-seek="${hl.start_sec}">▶ Watch</button>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <button type="button" class="btn-clip-both-cams ${sceneHasBothCams ? "active" : ""}" data-scene-both="${hlIdx}" title="Toggle Dual Camera (Both Facecams) on this clip only">
+                👁️ ${sceneHasBothCams ? "Dual: ON" : "Dual Cam"}
+              </button>
+              <button class="btn btn-xs btn-secondary" data-seek="${hl.start_sec}">▶ Watch</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1704,8 +1736,26 @@ function renderHighlightsList() {
     });
   });
 
+  el.highlightsList.querySelectorAll("[data-scene-both]").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const hlIdx = parseInt(btn.getAttribute("data-scene-both"), 10);
+      await toggleBothCamsForScene(hlIdx);
+    });
+  });
+
+  el.highlightsList.querySelectorAll(".cut-both-toggle").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const hlIdx = parseInt(btn.getAttribute("data-both-hl"), 10);
+      const cutIdx = parseInt(btn.getAttribute("data-both-cut"), 10);
+      await toggleBothCamsForCut(hlIdx, cutIdx);
+    });
+  });
+
   el.highlightsList.querySelectorAll(".cut-chip").forEach((chip) => {
-    chip.addEventListener("click", async () => {
+    chip.addEventListener("click", async (e) => {
+      if (e.target.closest(".cut-both-toggle")) return;
       pushUndoState("switch POV");
       const hlIdx = parseInt(chip.getAttribute("data-hl"), 10);
       const cutIdx = parseInt(chip.getAttribute("data-cut"), 10);
@@ -2036,17 +2086,38 @@ function renderTimeline() {
       block.style.left = `${cLeft}px`;
       block.style.width = `${cWidth}px`;
       const cutDur = (cut.end_sec - cut.start_sec).toFixed(1);
+      const cutBoth = isCutDualCamEnabled(cut, activeHl);
       const povLabel =
         cut.active_pov === "A"
-          ? `🟦 ${nameA}`
+          ? `🟦${cutBoth ? "👁️" : ""} ${nameA}`
           : cut.active_pov === "B"
-          ? `🟪 ${nameB}`
+          ? `🟪${cutBoth ? "👁️" : ""} ${nameB}`
           : "⚡ Split";
-      block.title = `${povLabel} (${formatTime(cut.start_sec)} – ${formatTime(cut.end_sec)}, ${cutDur}s)`;
+      block.title = `${povLabel}${cutBoth ? " + Dual Cam" : ""} (${formatTime(cut.start_sec)} – ${formatTime(cut.end_sec)}, ${cutDur}s)`;
       block.innerHTML = `
-        <span>${cWidth > 95 ? povLabel : cut.active_pov} (${cutDur}s)</span>
-        ${cWidth > 70 ? `<span class="cut-pov-pill" title="Switch POV">🎥</span>` : ""}
+        <span>${cWidth > 95 ? povLabel : cut.active_pov + (cutBoth ? "👁️" : "")} (${cutDur}s)</span>
+        <span style="display:inline-flex;align-items:center;gap:2px;">
+          ${cWidth > 55 ? `<span class="cut-both-pill ${cutBoth ? "active" : ""}" title="Toggle Dual Camera on this cut only">👁️</span>` : ""}
+          ${cWidth > 70 ? `<span class="cut-pov-pill" title="Switch POV">🎥</span>` : ""}
+        </span>
       `;
+
+      const bothPill = block.querySelector(".cut-both-pill");
+      if (bothPill) {
+        bothPill.addEventListener("mousedown", (e) => e.stopPropagation());
+        bothPill.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          pushUndoState("toggle cut Dual Cam");
+          const nextBoth = !isCutDualCamEnabled(cut, activeHl);
+          cut.both_cams = nextBoth;
+          if (nextBoth && cut.active_pov === "SPLIT" && bothCamsMode.startsWith("facecam_")) {
+            cut.active_pov = "A";
+          }
+          lastUiPov = "";
+          updateDirectorViewportUI(masterTime);
+          await saveHighlightsToServer();
+        });
+      }
 
       const pill = block.querySelector(".cut-pov-pill");
       if (pill) {
@@ -2189,7 +2260,8 @@ function startTimelineScrub(e) {
   if (
     e.target.classList.contains("scene-trim-handle") ||
     e.target.classList.contains("cut-boundary-handle") ||
-    e.target.classList.contains("cut-pov-pill")
+    e.target.classList.contains("cut-pov-pill") ||
+    e.target.classList.contains("cut-both-pill")
   ) {
     return;
   }
@@ -2263,6 +2335,7 @@ async function punchOrSwitchPov(targetPov) {
 
   if (
     livePunch &&
+    isPlaying &&
     cut.active_pov !== targetPov &&
     masterTime >= cut.start_sec + 0.8 &&
     masterTime <= cut.end_sec - 0.5
@@ -2273,14 +2346,23 @@ async function punchOrSwitchPov(targetPov) {
       start_sec: splitPoint,
       end_sec: cut.end_sec,
       active_pov: targetPov,
+      both_cams: false,
+      flip_lr: false,
       reason: `Punch to ${targetPov}`,
     };
     cut.end_sec = splitPoint;
     const idx = highlight.camera_cuts.indexOf(cut);
     highlight.camera_cuts.splice(idx + 1, 0, newCut);
   } else {
+    // If clicking the same POV button while Dual Cam is on, turn off Dual Cam so you get pure single-POV
+    if (cut.active_pov === targetPov && isCutDualCamEnabled(cut, highlight)) {
+      cut.both_cams = false;
+    } else if (targetPov === "SPLIT") {
+      cut.both_cams = false;
+    }
     cut.active_pov = targetPov;
   }
+  lastUiPov = "";
   updateDirectorViewportUI(masterTime);
   await saveHighlightsToServer();
 }
@@ -3354,9 +3436,9 @@ function initPlaybackTunerUI() {
 
   document.querySelectorAll("#qualityPillRow .tuner-pill").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      const q = btn.getAttribute("data-quality") || "540p";
+      const q = btn.getAttribute("data-quality") || "1080p";
       currentVideoQuality = q;
-      localStorage.setItem("dualsync_video_quality", q);
+      localStorage.setItem("dualsync_video_quality_v2", q);
       if (streamSourceMode === "cloud" && q !== "360p") {
         streamSourceMode = "auto";
         localStorage.setItem("dualsync_stream_source", "auto");
@@ -3416,62 +3498,120 @@ function initPlaybackTunerUI() {
 // =========================================================================
 
 async function toggleFlipLeftRight() {
-  const activeInfo = getActiveCutAtTime(masterTime);
-  const currentFlip =
-    activeInfo?.cut && activeInfo.cut.flip_lr != null
-      ? Boolean(activeInfo.cut.flip_lr)
-      : isFlippedLR;
-  isFlippedLR = !currentFlip;
-  localStorage.setItem("dualsync_flipped_lr", isFlippedLR ? "1" : "0");
-
-  if (activeInfo?.cut) {
-    pushUndoState("Flip Left/Right");
-    activeInfo.cut.flip_lr = isFlippedLR;
-  }
-
-  if (activeShortId) {
+  if (isShortsMode && activeShortId) {
     const sh = shortsListState.find((s) => s.id === activeShortId);
     if (sh) {
-      sh.flip_lr = isFlippedLR;
+      sh.flip_lr = !sh.flip_lr;
+      isFlippedLR = Boolean(sh.flip_lr);
       saveShortsState();
       renderShortsList();
+      lastUiPov = "";
+      updateDirectorViewportUI(masterTime);
+      return;
     }
   }
 
+  const activeInfo = getActiveCutAtTime(masterTime);
+  if (!activeInfo || !activeInfo.cut) return;
+  const { highlight, cut } = activeInfo;
+  const currentFlip = isCutFlippedLR(cut, highlight);
+  const nextFlip = !currentFlip;
+
+  pushUndoState("Flip Left/Right on Cut");
+  cut.flip_lr = nextFlip;
+
   lastUiPov = "";
-  updateFlipAndBothCamsUI(isFlippedLR, bothCamsEnabled);
+  const effBoth = isCutDualCamEnabled(cut, highlight);
+  updateFlipAndBothCamsUI(nextFlip, effBoth);
   updateDirectorViewportUI(masterTime);
   renderTimeline();
-  if (activeInfo?.cut) {
-    saveHighlightsToServer();
+  await saveHighlightsToServer();
+}
+
+async function toggleBothCamsForScene(hlIdx, forceVal = null) {
+  const hl = projectState?.highlights?.[hlIdx];
+  if (!hl) return;
+  pushUndoState("Toggle Clip Dual Camera");
+  const cuts = hl.camera_cuts || [];
+  const anyBoth = Boolean(hl.both_cams) || cuts.some((c) => Boolean(c.both_cams));
+  const nextBoth = forceVal !== null ? Boolean(forceVal) : !anyBoth;
+  hl.both_cams = nextBoth;
+  cuts.forEach((c) => {
+    c.both_cams = nextBoth;
+    if (nextBoth && c.active_pov === "SPLIT" && bothCamsMode.startsWith("facecam_")) {
+      c.active_pov = "A";
+    }
+  });
+  lastUiPov = "";
+  updateDirectorViewportUI(masterTime);
+  renderTimeline();
+  await saveHighlightsToServer();
+}
+
+async function toggleBothCamsForCut(hlIdx, cutIdx) {
+  const hl = projectState?.highlights?.[hlIdx];
+  const cut = hl?.camera_cuts?.[cutIdx];
+  if (!cut) return;
+  pushUndoState("Toggle Cut Dual Camera");
+  const nextBoth = !isCutDualCamEnabled(cut, hl);
+  cut.both_cams = nextBoth;
+  if (nextBoth && cut.active_pov === "SPLIT" && bothCamsMode.startsWith("facecam_")) {
+    cut.active_pov = "A";
   }
+  syncVideosToMasterTime(cut.start_sec + 0.05, true);
+  lastUiPov = "";
+  updateDirectorViewportUI(masterTime);
+  renderTimeline();
+  await saveHighlightsToServer();
 }
 
 async function toggleBothCams(forceVal = null) {
   const activeInfo = getActiveCutAtTime(masterTime);
-  const currentBoth =
-    activeInfo?.cut && activeInfo.cut.both_cams != null
-      ? Boolean(activeInfo.cut.both_cams)
-      : bothCamsEnabled;
-  bothCamsEnabled = forceVal !== null ? Boolean(forceVal) : !currentBoth;
-  localStorage.setItem("dualsync_both_cams_enabled", bothCamsEnabled ? "1" : "0");
+  if (!activeInfo || !activeInfo.cut) return;
 
-  if (activeInfo?.cut) {
-    pushUndoState("Toggle Both Cameras");
-    activeInfo.cut.both_cams = bothCamsEnabled;
-    // If on a 50/50 SPLIT cut when turning ON Both Cams in Facecam mode, switch to POV A so 1-POV + Both Facecams is immediately visible
-    if (bothCamsEnabled && activeInfo.cut.active_pov === "SPLIT" && bothCamsMode.startsWith("facecam_")) {
-      activeInfo.cut.active_pov = "A";
+  const { highlight, cut } = activeInfo;
+  const currentBoth = isCutDualCamEnabled(cut, highlight);
+  const nextBoth = forceVal !== null ? Boolean(forceVal) : !currentBoth;
+
+  pushUndoState("Toggle Clip Dual Camera");
+
+  const livePunch = document.getElementById("chkLivePunchCut")?.checked !== false;
+  if (
+    livePunch &&
+    isPlaying &&
+    masterTime >= cut.start_sec + 0.8 &&
+    masterTime <= cut.end_sec - 0.5
+  ) {
+    const splitPoint = Number(masterTime.toFixed(2));
+    const nextPov =
+      nextBoth && cut.active_pov === "SPLIT" && bothCamsMode.startsWith("facecam_")
+        ? "A"
+        : cut.active_pov;
+    const newCut = {
+      id: `cut_${Math.random().toString(36).slice(2, 9)}`,
+      start_sec: splitPoint,
+      end_sec: cut.end_sec,
+      active_pov: nextPov,
+      both_cams: nextBoth,
+      flip_lr: isCutFlippedLR(cut, highlight),
+      reason: nextBoth ? `${nextPov} + Dual Cam` : `POV ${nextPov}`,
+    };
+    cut.end_sec = splitPoint;
+    const idx = highlight.camera_cuts.indexOf(cut);
+    highlight.camera_cuts.splice(idx + 1, 0, newCut);
+  } else {
+    cut.both_cams = nextBoth;
+    if (nextBoth && cut.active_pov === "SPLIT" && bothCamsMode.startsWith("facecam_")) {
+      cut.active_pov = "A";
     }
   }
 
   lastUiPov = "";
-  updateFlipAndBothCamsUI(isFlippedLR, bothCamsEnabled);
+  const effFlip = isCutFlippedLR(cut, highlight);
+  updateFlipAndBothCamsUI(effFlip, nextBoth);
   syncVideosToMasterTime(masterTime, false);
   renderTimeline();
-  if (activeInfo?.cut) {
-    saveHighlightsToServer();
-  }
+  await saveHighlightsToServer();
 }
 
 function setShortsMode(enable) {
@@ -3618,21 +3758,20 @@ function saveFacecamCropsAndApply() {
       JSON.stringify({ A: facecamCropA, B: facecamCropB })
     );
   } catch (_) {}
-  bothCamsEnabled = true;
-  localStorage.setItem("dualsync_both_cams_enabled", "1");
   if (!bothCamsMode.startsWith("facecam_")) {
     bothCamsMode = "facecam_natural";
     localStorage.setItem("dualsync_both_cams_mode_v3", bothCamsMode);
   }
   const activeInfo = getActiveCutAtTime(masterTime);
   if (activeInfo?.cut) {
+    pushUndoState("Apply Facecam Crops to Current Cut");
     activeInfo.cut.both_cams = true;
     if (!isShortsMode && activeInfo.cut.active_pov === "SPLIT") {
       activeInfo.cut.active_pov = "A";
     }
+    saveHighlightsToServer();
   }
   lastUiPov = "";
-  updateFlipAndBothCamsUI(isFlippedLR, bothCamsEnabled);
   updateDirectorViewportUI(masterTime);
   closeFacecamCropModal();
 }
@@ -4115,18 +4254,16 @@ function initCoopAndShortsControls() {
     bothCamsMode = nextMode || "facecam_natural";
     localStorage.setItem("dualsync_both_cams_mode_v3", bothCamsMode);
     const activeInfo = getActiveCutAtTime(masterTime);
-    if (activeInfo?.cut && activeInfo.cut.active_pov === "SPLIT" && bothCamsMode.startsWith("facecam_")) {
-      activeInfo.cut.active_pov = "A";
+    if (activeInfo?.cut) {
       activeInfo.cut.both_cams = true;
+      if (activeInfo.cut.active_pov === "SPLIT" && bothCamsMode.startsWith("facecam_")) {
+        activeInfo.cut.active_pov = "A";
+      }
+      saveHighlightsToServer();
     }
-    if (!bothCamsEnabled) {
-      toggleBothCams(true);
-    } else {
-      lastUiPov = "";
-      updateFlipAndBothCamsUI(isFlippedLR, bothCamsEnabled);
-      updateDirectorViewportUI(masterTime);
-      renderTimeline();
-    }
+    lastUiPov = "";
+    updateDirectorViewportUI(masterTime);
+    renderTimeline();
   };
 
   ["selectBothCamsMode", "settingsFacecamPlacement", "modalSelectFacecamPlacement"].forEach((id) => {

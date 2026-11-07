@@ -335,23 +335,29 @@ body {
    16:9 CINEMA CANVAS + LUDWIG CO-OP BROADCAST ENGINE
    ========================================================= */
 .fio-player-shell {
-  flex: 1;
-  min-height: 290px;
+  flex: 1 1 0;
+  min-height: 260px;
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #05070b;
-  border: 1px solid var(--border);
+  background: transparent;
+  border: none;
   border-radius: 12px;
   overflow: hidden;
   position: relative;
+  container-type: size;
 }
 
 .monitors-container {
-  width: 100%;
-  height: 100%;
+  width: min(100cqw, calc(100cqh * 16 / 9));
+  height: min(100cqh, calc(100cqw * 9 / 16));
+  aspect-ratio: 16 / 9;
   position: relative;
   background: #000;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 38px rgba(0, 0, 0, 0.65);
   overflow: hidden;
 }
 
@@ -375,10 +381,6 @@ body {
   width: 100%;
   height: 100%;
   z-index: 1;
-}
-
-.monitors-container:not(.split-mode):not(.shorts-mode):not(.both-cams-70-30):not(.both-cams-16-9) .video-viewport.active-pov video {
-  object-fit: fill;
 }
 
 .monitors-container:not(.split-mode).show-pip .video-viewport.pip-mate {
@@ -3322,4 +3324,86 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* PER-CLIP & PER-CUT DUAL CAMERA TOGGLE BUTTONS */
+.btn-clip-both-cams {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(15, 23, 42, 0.65);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-clip-both-cams:hover {
+  border-color: #a78bfa;
+  color: #fff;
+}
+.btn-clip-both-cams.active {
+  background: rgba(139, 92, 246, 0.25);
+  border-color: #8b5cf6;
+  color: #e9d5ff;
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.3);
+}
+
+.cut-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.cut-chip.has-both-cams {
+  box-shadow: inset 0 0 0 1px #a78bfa;
+}
+.cut-both-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 0.66rem;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  opacity: 0.65;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.cut-both-toggle:hover {
+  opacity: 1;
+  border-color: #c084fc;
+}
+.cut-both-toggle.active {
+  opacity: 1;
+  background: #7c3aed;
+  border-color: #c4b5fd;
+  color: #fff;
+}
+
+.cut-both-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 4px;
+  margin-left: 3px;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  opacity: 0.72;
+  cursor: pointer;
+}
+.cut-both-pill:hover {
+  opacity: 1;
+  border-color: #c084fc;
+}
+.cut-both-pill.active {
+  opacity: 1;
+  background: #7c3aed;
+  border-color: #ddd6fe;
+  color: #fff;
 }
