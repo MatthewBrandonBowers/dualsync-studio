@@ -65,9 +65,9 @@
           <span>👁️ Both Cams</span>
         </label>
         <select id="selectBothCamsMode" class="both-cams-mode-select" title="How to display both cameras during a single-POV cut">
-          <option value="facecam_dual" selected>🎯 Both Facecams (Side-by-Side)</option>
-          <option value="facecam_corners">🎯 Both Facecams (Top Corners)</option>
-          <option value="facecam_top_center">🎯 Both Facecams (Top Center)</option>
+          <option value="facecam_natural" selected>🎯 Natural POV Spots (Lee Left · Matt Right)</option>
+          <option value="facecam_dual">🎯 Side-by-Side Facecams</option>
+          <option value="facecam_top_center">🎯 Top-Center Facecams</option>
           <option value="dual_70_30">🖥️ 70/30 Full Split</option>
           <option value="dual_50_50">🖥️ 50/50 Co-Op Lock</option>
           <option value="dual_16_9">🖥️ Dual 16:9 Monitors</option>
@@ -651,6 +651,25 @@
       <!-- TAB 4: SETTINGS -->
       <div id="tabPane_settings" class="fio-tab-pane">
         <div class="settings-group">
+          <div class="settings-title">Dual Facecams &amp; 1-POV Layout</div>
+          <label class="shorts-filter-lbl" style="margin-top:4px;">1-POV Facecam Placement:</label>
+          <select id="settingsFacecamPlacement" class="select-input" style="margin-bottom:8px;">
+            <option value="facecam_natural" selected>🎯 Natural POV Spots (Lee Left · Matt Right)</option>
+            <option value="facecam_dual">🎯 Side-by-Side (Next to Active Cam)</option>
+            <option value="facecam_top_center">🎯 Side-by-Side (Top Center)</option>
+            <option value="dual_70_30">🖥️ 70/30 Full Split</option>
+            <option value="dual_50_50">🖥️ 50/50 Co-Op Lock</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-main);cursor:pointer;margin-bottom:8px;">
+            <input id="chkSettingsFacecamBorder" type="checkbox" />
+            <span>Show Border &amp; Name Tag on 1-POV Facecams</span>
+          </label>
+          <button id="btnSettingsOpenFacecamCrop" type="button" class="btn btn-accent btn-xs btn-block">
+            🎯 Open Webcam Crop Selector
+          </button>
+        </div>
+
+        <div class="settings-group">
           <div class="settings-title">Audio Sync <span id="syncStateBadge" class="badge badge-synced">Synced</span></div>
           <div class="sync-metrics-grid">
             <div class="metric-box">
@@ -774,14 +793,26 @@
         <div class="preview-left-info">
           <span class="shorts-fmt-label">👁️ Live Dual Facecam Preview:</span>
           <div class="facecam-preview-pair">
-            <div class="facecam-preview-thumb thumb-a">
-              <canvas id="previewCropCanvasA" width="160" height="160"></canvas>
-              <span>Cam A</span>
-            </div>
             <div class="facecam-preview-thumb thumb-b">
               <canvas id="previewCropCanvasB" width="160" height="160"></canvas>
-              <span>Cam B</span>
+              <span>Lee (Left)</span>
             </div>
+            <div class="facecam-preview-thumb thumb-a">
+              <canvas id="previewCropCanvasA" width="160" height="160"></canvas>
+              <span>Matt (Right)</span>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;margin-left:8px;">
+            <label class="shorts-filter-lbl" style="margin:0;">1-POV Camera Placement:</label>
+            <select id="modalSelectFacecamPlacement" class="both-cams-mode-select" style="min-width:230px;">
+              <option value="facecam_natural" selected>🎯 Natural POV Spots (Lee Left · Matt Right)</option>
+              <option value="facecam_dual">🎯 Side-by-Side (Next to Active Cam)</option>
+              <option value="facecam_top_center">🎯 Side-by-Side (Top Center)</option>
+            </select>
+            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted);cursor:pointer;">
+              <input id="chkModalFacecamBorder" type="checkbox" />
+              <span>Show border &amp; name tag on 1-POV overlay</span>
+            </label>
           </div>
         </div>
         <div class="facecam-modal-actions">

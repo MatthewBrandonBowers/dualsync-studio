@@ -3017,6 +3017,34 @@ body {
   pointer-events: auto;
 }
 
+/* Natural POV Spots: Each player's camera stays at its exact POV coordinates (Lee on Left, Matt on Right) */
+.dual-facecam-overlay.dock-natural-pov {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  pointer-events: none;
+  display: block;
+}
+.dual-facecam-overlay.dock-natural-pov .facecam-crop-box {
+  position: absolute;
+  flex: none;
+  border: 2px solid rgba(99, 102, 241, 0.75);
+  border-radius: 0;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+}
+.dual-facecam-overlay.dock-natural-pov.hide-facecam-chrome .facecam-crop-box {
+  border: none !important;
+  box-shadow: none !important;
+}
+.dual-facecam-overlay.hide-facecam-chrome .facecam-mini-tag {
+  display: none !important;
+}
+
 /* 9:16 Vertical Shorts: Dual Facecams on Top 32% + Gameplay on Bottom 68% */
 .dual-facecam-overlay.shorts-top-dock {
   top: 0;

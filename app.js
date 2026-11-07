@@ -610,7 +610,8 @@ let lockedTimelineWindow = null;
 // Co-Op Left/Right Flip, Both Cameras (Facecams) Always-On & 9:16 Shorts Formatting State
 let isFlippedLR = localStorage.getItem("dualsync_flipped_lr") === "1";
 let bothCamsEnabled = localStorage.getItem("dualsync_both_cams_enabled") !== "0";
-let bothCamsMode = localStorage.getItem("dualsync_both_cams_mode_v2") || "facecam_dual";
+let bothCamsMode = localStorage.getItem("dualsync_both_cams_mode_v3") || "facecam_natural";
+let facecamShowBorder = localStorage.getItem("dualsync_facecam_border_v1") === "1";
 let isShortsMode = false;
 let shortsLayout = "facecams_gameplay";
 let shortsPanA = 50;
@@ -634,6 +635,21 @@ try {
     facecamCropB = { ...DEFAULT_FACECAM_CROP_B, ...savedCrops.B };
   }
 } catch (_) {}
+
+function resetFacecamBoxInlineStyles() {
+  const boxA = document.getElementById("facecamBoxA");
+  const boxB = document.getElementById("facecamBoxB");
+  [boxA, boxB].forEach((b) => {
+    if (!b) return;
+    b.style.left = "";
+    b.style.right = "";
+    b.style.top = "";
+    b.style.width = "";
+    b.style.height = "";
+    b.style.display = "";
+    b.style.order = "";
+  });
+}
 
 function drawCroppedVideoToCanvas(videoEl, crop, canvasEl) {
   if (!videoEl || !canvasEl || videoEl.readyState < 2) return;
@@ -679,18 +695,27 @@ function updateFlipAndBothCamsUI(effFlip = isFlippedLR, effBoth = bothCamsEnable
   const nameA = (el.playerAName?.value || "Matthew").split(" ")[0];
   const nameB = (el.playerBName?.value || "Leelai").split(" ")[0];
 
+  const isNatFacecam = !isShortsMode && bothCamsMode === "facecam_natural";
   const flipLbl = document.getElementById("flipLrLabel");
-  if (flipLbl) flipLbl.textContent = effFlip ? `${nameB} | ${nameA}` : `${nameA} | ${nameB}`;
+  if (flipLbl) {
+    flipLbl.textContent = isNatFacecam
+      ? effFlip ? `${nameA} | ${nameB}` : `${nameB} | ${nameA}`
+      : effFlip ? `${nameB} | ${nameA}` : `${nameA} | ${nameB}`;
+  }
 
   const deckFlipTitle = document.getElementById("deckFlipTitle");
-  if (deckFlipTitle) deckFlipTitle.textContent = effFlip ? `⇄ ${nameB}|${nameA}` : `⇄ ${nameA}|${nameB}`;
+  if (deckFlipTitle) {
+    deckFlipTitle.textContent = isNatFacecam
+      ? effFlip ? `⇄ ${nameA}|${nameB}` : `⇄ ${nameB}|${nameA}`
+      : effFlip ? `⇄ ${nameB}|${nameA}` : `⇄ ${nameA}|${nameB}`;
+  }
 
   const shortsFlipLbl = document.getElementById("shortsFlipOrderLabel");
   if (shortsFlipLbl) {
     if (shortsLayout === "facecams_gameplay") {
       shortsFlipLbl.textContent = effFlip
-        ? `Cams: ${nameB} | ${nameA}`
-        : `Cams: ${nameA} | ${nameB}`;
+        ? `Cams: ${nameA} | ${nameB}`
+        : `Cams: ${nameB} | ${nameA}`;
     } else {
       shortsFlipLbl.textContent = effFlip
         ? `Top: ${nameB} · Bot: ${nameA}`
@@ -710,8 +735,14 @@ function updateFlipAndBothCamsUI(effFlip = isFlippedLR, effBoth = bothCamsEnable
 
   const chkBoth = document.getElementById("chkBothCamsAlways");
   if (chkBoth && chkBoth.checked !== Boolean(effBoth)) chkBoth.checked = Boolean(effBoth);
-  const selBoth = document.getElementById("selectBothCamsMode");
-  if (selBoth && selBoth.value !== bothCamsMode) selBoth.value = bothCamsMode;
+  ["selectBothCamsMode", "settingsFacecamPlacement", "modalSelectFacecamPlacement"].forEach((id) => {
+    const sel = document.getElementById(id);
+    if (sel && sel.value !== bothCamsMode) sel.value = bothCamsMode;
+  });
+  ["chkSettingsFacecamBorder", "chkModalFacecamBorder"].forEach((id) => {
+    const chk = document.getElementById(id);
+    if (chk && chk.checked !== facecamShowBorder) chk.checked = facecamShowBorder;
+  });
 }
 
 function updateDirectorViewportUI(t) {
@@ -737,12 +768,13 @@ function updateDirectorViewportUI(t) {
   const nameA = (el.playerAName?.value || "Matthew").replace(/\s*\(POV [AB]\)/i, "");
   const nameB = (el.playerBName?.value || "Leelai").replace(/\s*\(POV [AB]\)/i, "");
 
-  const cropKey = `${facecamCropA.x}_${facecamCropA.y}_${facecamCropA.w}_${facecamCropA.h}_${facecamCropB.x}_${facecamCropB.y}_${facecamCropB.w}_${facecamCropB.h}`;
+  const cropKey = `${facecamCropA.x}_${facecamCropA.y}_${facecamCropA.w}_${facecamCropA.h}_${facecamCropB.x}_${facecamCropB.y}_${facecamCropB.w}_${facecamCropB.h}_${facecamShowBorder ? 1 : 0}`;
   const povKey = `${pov}_${effFlip ? 1 : 0}_${effBoth ? 1 : 0}_${bothCamsMode}_${isShortsMode ? 1 : 0}_${shortsLayout}_${shortsPanA}_${shortsPanB}_${shortsZoom}_${shortsHookStyle}_${shortsHookText}_${cropKey}`;
   if (povKey !== lastUiPov) {
     lastUiPov = povKey;
     updateFlipAndBothCamsUI(effFlip, effBoth);
     applyShortsCropTransform();
+    resetFacecamBoxInlineStyles();
 
     const playerShell = document.getElementById("playerShell");
     if (playerShell) playerShell.classList.toggle("shorts-aspect", isShortsMode);
@@ -768,6 +800,8 @@ function updateDirectorViewportUI(t) {
     el.viewportB.classList.remove("active-pov", "pip-mate");
 
     const facecamOverlay = document.getElementById("dualFacecamOverlay");
+    const boxA = document.getElementById("facecamBoxA");
+    const boxB = document.getElementById("facecamBoxB");
     if (facecamOverlay) {
       facecamOverlay.className = "dual-facecam-overlay hidden";
     }
@@ -795,6 +829,11 @@ function updateDirectorViewportUI(t) {
         if (facecamOverlay) {
           facecamOverlay.className = "dual-facecam-overlay shorts-top-dock";
         }
+        // Natural order: Leelai (B) on Left, Matthew (A) on Right
+        if (boxB && boxA) {
+          boxB.style.order = effFlip ? "2" : "1";
+          boxA.style.order = effFlip ? "1" : "2";
+        }
         const gameplayIsB = pov === "B" || (pov === "SPLIT" && effFlip);
         if (gameplayIsB) {
           el.viewportB.classList.add("active-pov");
@@ -803,7 +842,7 @@ function updateDirectorViewportUI(t) {
           el.viewportA.classList.add("active-pov");
           el.viewportB.classList.add("pip-mate");
         }
-        const camOrder = effFlip ? `${nameB} | ${nameA}` : `${nameA} | ${nameB}`;
+        const camOrder = effFlip ? `${nameA} | ${nameB}` : `${nameB} | ${nameA}`;
         const gpName = gameplayIsB ? nameB : nameA;
         el.liveDirectorBadge.textContent = `📱 9:16 Facecams (${camOrder}) + ${gpName} POV`;
       } else {
@@ -828,14 +867,61 @@ function updateDirectorViewportUI(t) {
         el.viewportA.classList.add("active-pov");
         el.viewportB.classList.add("pip-mate");
       }
+
       if (facecamOverlay) {
-        let dockClass = pov === "A" ? "dock-top-right" : "dock-top-left";
-        if (bothCamsMode === "facecam_top_center") dockClass = "dock-top-center";
-        else if (bothCamsMode === "facecam_corners") dockClass = "dock-corners";
-        facecamOverlay.className = `dual-facecam-overlay ${dockClass}`;
+        const chromeCls = facecamShowBorder ? "" : " hide-facecam-chrome";
+        if (bothCamsMode === "facecam_natural" || bothCamsMode === "facecam_corners") {
+          facecamOverlay.className = `dual-facecam-overlay dock-natural-pov${chromeCls}`;
+          if (!effFlip) {
+            // Natural POV positions: Leelai (Cam B) at his exact POV spot on Left, Matthew (Cam A) at his exact POV spot on Right
+            if (boxB) {
+              boxB.style.left = `${facecamCropB.x}%`;
+              boxB.style.top = `${facecamCropB.y}%`;
+              boxB.style.width = `${facecamCropB.w}%`;
+              boxB.style.height = `${facecamCropB.h}%`;
+              // On POV B, Leelai's webcam is already natively in the video; only overlay if border is requested
+              boxB.style.display = (pov === "A" || facecamShowBorder) ? "block" : "none";
+            }
+            if (boxA) {
+              boxA.style.left = `${facecamCropA.x}%`;
+              boxA.style.top = `${facecamCropA.y}%`;
+              boxA.style.width = `${facecamCropA.w}%`;
+              boxA.style.height = `${facecamCropA.h}%`;
+              // On POV A, Matthew's webcam is already natively in the video; only overlay if border is requested
+              boxA.style.display = (pov === "B" || facecamShowBorder) ? "block" : "none";
+            }
+          } else {
+            // Flipped: Matthew on Left, Leelai on Right
+            if (boxA) {
+              boxA.style.left = `${facecamCropB.x}%`;
+              boxA.style.top = `${facecamCropB.y}%`;
+              boxA.style.width = `${facecamCropA.w}%`;
+              boxA.style.height = `${facecamCropA.h}%`;
+              boxA.style.display = "block";
+            }
+            if (boxB) {
+              boxB.style.left = `${Math.max(0, 100 - facecamCropB.w)}%`;
+              boxB.style.top = `${facecamCropA.y}%`;
+              boxB.style.width = `${facecamCropB.w}%`;
+              boxB.style.height = `${facecamCropB.h}%`;
+              boxB.style.display = "block";
+            }
+          }
+        } else {
+          const dockClass =
+            bothCamsMode === "facecam_top_center"
+              ? "dock-top-center"
+              : pov === "A"
+              ? "dock-top-right"
+              : "dock-top-left";
+          facecamOverlay.className = `dual-facecam-overlay ${dockClass}${chromeCls}`;
+        }
       }
-      const camOrder = effFlip ? `${nameB} | ${nameA}` : `${nameA} | ${nameB}`;
-      el.liveDirectorBadge.textContent = `👁️ ${pov === "A" ? nameA : nameB} POV + Both Facecams (${camOrder})`;
+      const camOrder =
+        bothCamsMode === "facecam_natural"
+          ? effFlip ? `${nameA} Left · ${nameB} Right` : `${nameB} Left · ${nameA} Right`
+          : effFlip ? `${nameB} | ${nameA}` : `${nameA} | ${nameB}`;
+      el.liveDirectorBadge.textContent = `👁️ ${pov === "A" ? nameA : nameB} POV + Both Cams (${camOrder})`;
     } else if (pov === "SPLIT" || (effBoth && bothCamsMode === "dual_50_50")) {
       el.monitorsContainer.classList.add("split-mode");
       if (pov === "A") el.monitorsContainer.classList.add("single-pov-focus-a");
@@ -3535,8 +3621,8 @@ function saveFacecamCropsAndApply() {
   bothCamsEnabled = true;
   localStorage.setItem("dualsync_both_cams_enabled", "1");
   if (!bothCamsMode.startsWith("facecam_")) {
-    bothCamsMode = "facecam_dual";
-    localStorage.setItem("dualsync_both_cams_mode_v2", bothCamsMode);
+    bothCamsMode = "facecam_natural";
+    localStorage.setItem("dualsync_both_cams_mode_v3", bothCamsMode);
   }
   const activeInfo = getActiveCutAtTime(masterTime);
   if (activeInfo?.cut) {
@@ -4025,31 +4111,50 @@ function initCoopAndShortsControls() {
   chkBoth?.addEventListener("change", (e) => toggleBothCams(e.target.checked));
   document.getElementById("btnDeckBothCams")?.addEventListener("click", () => toggleBothCams());
 
-  const selBothMode = document.getElementById("selectBothCamsMode");
-  if (selBothMode) {
-    selBothMode.value = bothCamsMode;
-    selBothMode.addEventListener("change", (e) => {
-      bothCamsMode = e.target.value || "facecam_dual";
-      localStorage.setItem("dualsync_both_cams_mode_v2", bothCamsMode);
-      const activeInfo = getActiveCutAtTime(masterTime);
-      if (activeInfo?.cut && activeInfo.cut.active_pov === "SPLIT" && bothCamsMode.startsWith("facecam_")) {
-        activeInfo.cut.active_pov = "A";
-        activeInfo.cut.both_cams = true;
-      }
-      if (!bothCamsEnabled) {
-        toggleBothCams(true);
-      } else {
+  const applyBothCamsModeChange = (nextMode) => {
+    bothCamsMode = nextMode || "facecam_natural";
+    localStorage.setItem("dualsync_both_cams_mode_v3", bothCamsMode);
+    const activeInfo = getActiveCutAtTime(masterTime);
+    if (activeInfo?.cut && activeInfo.cut.active_pov === "SPLIT" && bothCamsMode.startsWith("facecam_")) {
+      activeInfo.cut.active_pov = "A";
+      activeInfo.cut.both_cams = true;
+    }
+    if (!bothCamsEnabled) {
+      toggleBothCams(true);
+    } else {
+      lastUiPov = "";
+      updateFlipAndBothCamsUI(isFlippedLR, bothCamsEnabled);
+      updateDirectorViewportUI(masterTime);
+      renderTimeline();
+    }
+  };
+
+  ["selectBothCamsMode", "settingsFacecamPlacement", "modalSelectFacecamPlacement"].forEach((id) => {
+    const sel = document.getElementById(id);
+    if (sel) {
+      sel.value = bothCamsMode;
+      sel.addEventListener("change", (e) => applyBothCamsModeChange(e.target.value));
+    }
+  });
+
+  ["chkSettingsFacecamBorder", "chkModalFacecamBorder"].forEach((id) => {
+    const chk = document.getElementById(id);
+    if (chk) {
+      chk.checked = facecamShowBorder;
+      chk.addEventListener("change", (e) => {
+        facecamShowBorder = Boolean(e.target.checked);
+        localStorage.setItem("dualsync_facecam_border_v1", facecamShowBorder ? "1" : "0");
         lastUiPov = "";
         updateFlipAndBothCamsUI(isFlippedLR, bothCamsEnabled);
         updateDirectorViewportUI(masterTime);
-        renderTimeline();
-      }
-    });
-  }
+      });
+    }
+  });
 
   // 3. Interactive Facecam Crop Selector Modal triggers
   document.getElementById("btnOpenFacecamCropModal")?.addEventListener("click", () => openFacecamCropModal());
   document.getElementById("btnShortsCropFacecams")?.addEventListener("click", () => openFacecamCropModal());
+  document.getElementById("btnSettingsOpenFacecamCrop")?.addEventListener("click", () => openFacecamCropModal());
   document.getElementById("btnCloseFacecamModal")?.addEventListener("click", () => closeFacecamCropModal());
   document.getElementById("btnRefreshCropFrames")?.addEventListener("click", () => drawFullFramesToCalibrator());
   document.getElementById("btnAutoSnapFacecams")?.addEventListener("click", () => {
