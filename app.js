@@ -2084,6 +2084,44 @@ window.addEventListener("keydown", (e) => {
 
 window.addEventListener("resize", () => renderTimeline());
 
+const btnPublishSite = document.getElementById("btnPublishSite");
+if (btnPublishSite) {
+  if (IS_STATIC_CLOUD) {
+    btnPublishSite.textContent = "☁️ Live Cloud Site";
+    btnPublishSite.title = "Running on permanent GitHub Pages CDN — edits auto-save in browser & export via XML/JSON";
+  }
+  btnPublishSite.addEventListener("click", async () => {
+    const permanentUrl = "https://matthewbrandonbowers.github.io/dualsync-studio/?pw=leelai";
+    if (IS_STATIC_CLOUD) {
+      try {
+        await navigator.clipboard.writeText(`${permanentUrl} (Password: leelai)`);
+        const orig = btnPublishSite.textContent;
+        btnPublishSite.textContent = "✅ Link Copied!";
+        setTimeout(() => {
+          btnPublishSite.textContent = orig;
+        }, 3000);
+      } catch (_) {}
+      return;
+    }
+    const orig = btnPublishSite.textContent;
+    btnPublishSite.textContent = "⏳ Publishing...";
+    showStatus("Publishing latest trims, cuts & review notes to https://matthewbrandonbowers.github.io/dualsync-studio/?pw=leelai...");
+    try {
+      const r = await fetch("/api/publish-site", { method: "POST" });
+      if (!r.ok) throw new Error("Publish failed");
+      await navigator.clipboard.writeText(`${permanentUrl} (Password: leelai)`);
+      btnPublishSite.textContent = "✅ Published & Copied!";
+    } catch (err) {
+      btnPublishSite.textContent = "⚠️ Publish Error";
+    } finally {
+      hideStatus();
+      setTimeout(() => {
+        btnPublishSite.textContent = orig;
+      }, 4000);
+    }
+  });
+}
+
 const btnShareLink = document.getElementById("btnShareLink");
 if (btnShareLink) {
   btnShareLink.addEventListener("click", async () => {
