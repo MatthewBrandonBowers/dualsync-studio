@@ -59,17 +59,23 @@
       </button>
 
       <!-- Enable Both Cameras at the Same Time (even on single-POV cuts) -->
-      <div class="both-cams-control-group" title="Show both cameras simultaneously even when a cut is set to a single POV (A or B)">
+      <div class="both-cams-control-group" title="Show both players' cameras simultaneously even when a cut is set to a single POV (A or B)">
         <label class="fio-toggle-chip both-cams-chip">
           <input id="chkBothCamsAlways" type="checkbox" checked />
           <span>👁️ Both Cams</span>
         </label>
         <select id="selectBothCamsMode" class="both-cams-mode-select" title="How to display both cameras during a single-POV cut">
-          <option value="pip_corner">Corner PiP</option>
-          <option value="dual_70_30" selected>70/30 Dual Split</option>
-          <option value="dual_50_50">50/50 Co-Op Lock</option>
-          <option value="dual_16_9">Dual 16:9 Monitors</option>
+          <option value="facecam_dual" selected>🎯 Both Facecams (Side-by-Side)</option>
+          <option value="facecam_corners">🎯 Both Facecams (Top Corners)</option>
+          <option value="facecam_top_center">🎯 Both Facecams (Top Center)</option>
+          <option value="dual_70_30">🖥️ 70/30 Full Split</option>
+          <option value="dual_50_50">🖥️ 50/50 Co-Op Lock</option>
+          <option value="dual_16_9">🖥️ Dual 16:9 Monitors</option>
+          <option value="pip_corner">🖥️ Corner PiP (Full Screen)</option>
         </select>
+        <button id="btnOpenFacecamCropModal" type="button" class="btn btn-outline btn-xs" title="Select & crop each player's webcam region on their video">
+          🎯 Select Cams
+        </button>
       </div>
 
       <!-- Legacy PiP checkbox kept synced for compatibility -->
@@ -172,6 +178,18 @@
             </div>
           </div>
 
+          <!-- LIVE CROPPED DUAL FACECAMS OVERLAY (For 1-POV Facecams & 9:16 Shorts Facecams + Gameplay) -->
+          <div id="dualFacecamOverlay" class="dual-facecam-overlay hidden">
+            <div id="facecamBoxA" class="facecam-crop-box cam-a" title="Click 🎯 Select Cams to adjust webcam crop">
+              <canvas id="facecamCanvasA" width="320" height="320"></canvas>
+              <span id="facecamLabelA" class="facecam-mini-tag tag-a">Matthew</span>
+            </div>
+            <div id="facecamBoxB" class="facecam-crop-box cam-b" title="Click 🎯 Select Cams to adjust webcam crop">
+              <canvas id="facecamCanvasB" width="320" height="320"></canvas>
+              <span id="facecamLabelB" class="facecam-mini-tag tag-b">Leelai</span>
+            </div>
+          </div>
+
           <!-- CENTER DIVIDER FOR 50/50 SPLIT OR VERTICAL STACK -->
           <div id="splitCenterDivider" class="split-center-divider">
             <span id="splitDividerPill" class="vs-pill">CO-OP</span>
@@ -199,7 +217,8 @@
         <div class="shorts-fmt-group">
           <span class="shorts-fmt-label">📱 Shorts Layout:</span>
           <div id="shortsLayoutPills" class="shorts-layout-pills">
-            <button type="button" class="shorts-layout-btn active" data-shorts-layout="stack_50_50" title="Stacked 50/50 Top & Bottom Split">🥞 50/50 Stack</button>
+            <button type="button" class="shorts-layout-btn active" data-shorts-layout="facecams_gameplay" title="Both Cropped Facecams on Top + Centered Gameplay Below">🔥 Facecams + POV</button>
+            <button type="button" class="shorts-layout-btn" data-shorts-layout="stack_50_50" title="Stacked 50/50 Top & Bottom Split">🥞 50/50 Stack</button>
             <button type="button" class="shorts-layout-btn" data-shorts-layout="stack_70_30" title="70% Hero POV + 30% Teammate Reaction">🎯 70/30 Hero</button>
             <button type="button" class="shorts-layout-btn" data-shorts-layout="full_pip" title="Full 9:16 Vertical + Floating Corner PiP">🖼️ Full + PiP</button>
             <button type="button" class="shorts-layout-btn" data-shorts-layout="full_single" title="Full 9:16 Vertical Single Camera">🎬 Single 9:16</button>
@@ -208,8 +227,11 @@
         </div>
 
         <div class="shorts-fmt-group">
-          <button id="btnShortsFlipOrder" type="button" class="btn btn-flip-lr btn-xs" title="Swap Top & Bottom cameras (Key F)">
+          <button id="btnShortsFlipOrder" type="button" class="btn btn-flip-lr btn-xs" title="Swap Left/Right or Top/Bottom cameras (Key F)">
             ⇄ <span id="shortsFlipOrderLabel">Top: A · Bot: B</span>
+          </button>
+          <button id="btnShortsCropFacecams" type="button" class="btn btn-outline btn-xs" title="Select & adjust webcam crop boxes for both players">
+            🎯 Select Cams
           </button>
         </div>
 
@@ -701,6 +723,81 @@
       </div>
     </aside>
   </main>
+
+  <!-- INTERACTIVE FACECAM / WEBCAM CROP CALIBRATOR MODAL -->
+  <div id="facecamCropModal" class="facecam-crop-modal hidden">
+    <div class="facecam-crop-dialog">
+      <div class="facecam-crop-header">
+        <div>
+          <h3>🎯 Select &amp; Crop Player Facecams</h3>
+          <p>Click and drag directly over each player's webcam on their video frame (or drag the box / corner handle) so DualSync Studio can show both facecams simultaneously during 1-POV cuts and 9:16 Shorts.</p>
+        </div>
+        <button id="btnCloseFacecamModal" type="button" class="btn btn-ghost btn-xs">✕ Close</button>
+      </div>
+
+      <div class="facecam-calibrator-grid">
+        <!-- Player A Frame -->
+        <div class="facecam-cal-panel">
+          <div class="facecam-cal-title">
+            <span class="live-dot a"></span>
+            <strong id="calTitleA">Matthew (POV A) — Select Webcam Box</strong>
+            <span id="calCoordsA" class="cal-coords-pill">x: 79.4%, y: 0.0%, w: 20.6%, h: 36.7%</span>
+          </div>
+          <div id="cropStageA" class="facecam-crop-stage" data-cam="A">
+            <canvas id="cropFrameCanvasA" width="640" height="360"></canvas>
+            <div id="cropBoxOverlayA" class="crop-selection-rect rect-a">
+              <span class="crop-box-badge">🟦 Cam A</span>
+              <div class="crop-resize-handle" data-handle="se"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Player B Frame -->
+        <div class="facecam-cal-panel">
+          <div class="facecam-cal-title">
+            <span class="live-dot b"></span>
+            <strong id="calTitleB">Leelai (POV B) — Select Webcam Box</strong>
+            <span id="calCoordsB" class="cal-coords-pill">x: 0.0%, y: 0.0%, w: 18.1%, h: 32.4%</span>
+          </div>
+          <div id="cropStageB" class="facecam-crop-stage" data-cam="B">
+            <canvas id="cropFrameCanvasB" width="640" height="360"></canvas>
+            <div id="cropBoxOverlayB" class="crop-selection-rect rect-b">
+              <span class="crop-box-badge">🟪 Cam B</span>
+              <div class="crop-resize-handle" data-handle="se"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Side-by-Side Cropped Facecam Preview -->
+      <div class="facecam-live-preview-bar">
+        <div class="preview-left-info">
+          <span class="shorts-fmt-label">👁️ Live Dual Facecam Preview:</span>
+          <div class="facecam-preview-pair">
+            <div class="facecam-preview-thumb thumb-a">
+              <canvas id="previewCropCanvasA" width="160" height="160"></canvas>
+              <span>Cam A</span>
+            </div>
+            <div class="facecam-preview-thumb thumb-b">
+              <canvas id="previewCropCanvasB" width="160" height="160"></canvas>
+              <span>Cam B</span>
+            </div>
+          </div>
+        </div>
+        <div class="facecam-modal-actions">
+          <button id="btnAutoSnapFacecams" type="button" class="btn btn-outline btn-xs" title="Snap crop boxes to Matthew & Leelai's exact OBS webcam corners">
+            ✨ Auto-Snap Webcams
+          </button>
+          <button id="btnRefreshCropFrames" type="button" class="btn btn-ghost btn-xs" title="Grab current playhead frame">
+            🔄 Grab Current Frame
+          </button>
+          <button id="btnSaveFacecamCrops" type="button" class="btn btn-primary btn-xs">
+            ✅ Save &amp; Apply Facecam Crops
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script src="./app.js"></script>
 </body>

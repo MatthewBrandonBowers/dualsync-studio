@@ -2864,7 +2864,8 @@ body {
   padding: 2px 6px;
   border-radius: 5px;
 }
-.short-actions-row {
+.short-actions-row,
+.short-card-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2872,4 +2873,422 @@ body {
   flex-wrap: wrap;
   padding-top: 4px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.short-card.active {
+  border-color: #a855f7;
+  box-shadow: 0 0 0 1px #a855f7, 0 0 16px rgba(168, 85, 247, 0.2);
+  background: rgba(139, 92, 246, 0.12);
+}
+.short-card-thumb {
+  width: 64px;
+  height: 76px;
+  border-radius: 7px;
+  object-fit: cover;
+  border: 1px solid rgba(139, 92, 246, 0.45);
+  background: #05070b;
+}
+.short-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.short-card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.short-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.short-virality-badge {
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.short-card-hook {
+  font-size: 10.5px;
+  color: #c4b5fd;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.short-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.short-meta-pill {
+  background: rgba(99, 102, 241, 0.16);
+  border: 1px solid rgba(99, 102, 241, 0.32);
+  color: #c7d2fe;
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* =========================================================
+   CROPPED DUAL FACECAMS OVERLAY (1-POV & 9:16 SHORTS)
+   ========================================================= */
+.dual-facecam-overlay {
+  position: absolute;
+  z-index: 26;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  pointer-events: auto;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
+  border: 2px solid rgba(99, 102, 241, 0.7);
+  background: #05070b;
+}
+.dual-facecam-overlay.hidden {
+  display: none !important;
+}
+.monitors-container.flipped-lr .dual-facecam-overlay {
+  flex-direction: row-reverse;
+}
+
+/* Dock Top-Right (Covers Matthew's single baked-in webcam on POV A and puts both facecams side-by-side) */
+.dual-facecam-overlay.dock-top-right {
+  top: 0;
+  right: 0;
+  width: 41.2%;
+  height: 36.8%;
+  border-top: none;
+  border-right: none;
+  border-radius: 0 0 0 8px;
+}
+
+/* Dock Top-Left (Covers Leelai's single baked-in webcam on POV B and puts both facecams side-by-side) */
+.dual-facecam-overlay.dock-top-left {
+  top: 0;
+  left: 0;
+  width: 38.0%;
+  height: 34.5%;
+  border-top: none;
+  border-left: none;
+  border-radius: 0 0 8px 0;
+}
+
+/* Dock Top-Center */
+.dual-facecam-overlay.dock-top-center {
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 38%;
+  height: 34%;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+}
+
+/* Dock Opposite Top Corners (Matthew in one corner, Leelai in the other corner) */
+.dual-facecam-overlay.dock-corners {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 36.8%;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  pointer-events: none;
+  justify-content: space-between;
+}
+.dual-facecam-overlay.dock-corners .facecam-crop-box {
+  width: 20.6%;
+  height: 100%;
+  flex: 0 0 auto;
+  border: 2px solid rgba(99, 102, 241, 0.75);
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.65);
+  pointer-events: auto;
+}
+
+/* 9:16 Vertical Shorts: Dual Facecams on Top 32% + Gameplay on Bottom 68% */
+.dual-facecam-overlay.shorts-top-dock {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 32%;
+  border-radius: 0;
+  border: none;
+  border-bottom: 2px solid #8b5cf6;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+}
+
+.facecam-crop-box {
+  position: relative;
+  flex: 1 1 50%;
+  height: 100%;
+  overflow: hidden;
+  background: #080b12;
+  cursor: pointer;
+}
+.facecam-crop-box + .facecam-crop-box {
+  border-left: 1.5px solid rgba(255, 255, 255, 0.22);
+}
+.monitors-container.flipped-lr .facecam-crop-box + .facecam-crop-box {
+  border-left: none;
+  border-right: 1.5px solid rgba(255, 255, 255, 0.22);
+}
+.facecam-crop-box canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.facecam-mini-tag {
+  position: absolute;
+  bottom: 4px;
+  left: 5px;
+  background: rgba(10, 14, 24, 0.82);
+  color: #f8fafc;
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.facecam-mini-tag.tag-a {
+  border-color: rgba(59, 130, 246, 0.6);
+  color: #93c5fd;
+}
+.facecam-mini-tag.tag-b {
+  border-color: rgba(168, 85, 247, 0.6);
+  color: #d8b4fe;
+}
+
+/* Shorts Facecams + Gameplay Layout: Gameplay occupies bottom 68% */
+.monitors-container.shorts-mode.shorts-facecams-gameplay .video-viewport.active-pov {
+  display: block !important;
+  top: 32% !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 68% !important;
+  z-index: 5;
+}
+.monitors-container.shorts-mode.shorts-facecams-gameplay .video-viewport.pip-mate {
+  display: block !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  width: 1px !important;
+  height: 1px !important;
+}
+.monitors-container.shorts-mode.shorts-facecams-gameplay .video-viewport.active-pov video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.monitors-container.shorts-mode.shorts-facecams-gameplay .split-center-divider {
+  display: none !important;
+}
+
+/* Even in 16:9 1-POV Facecam mode, keep pip-mate decoding invisibly so its video feeds the canvas! */
+.monitors-container.facecam-1pov-active .video-viewport.pip-mate {
+  display: block !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  width: 2px !important;
+  height: 2px !important;
+  overflow: hidden !important;
+  z-index: -1 !important;
+}
+
+/* =========================================================
+   INTERACTIVE FACECAM CROP CALIBRATOR MODAL
+   ========================================================= */
+.facecam-crop-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(4, 6, 12, 0.84);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.facecam-crop-modal.hidden {
+  display: none !important;
+}
+.facecam-crop-dialog {
+  width: min(1160px, 96vw);
+  max-height: 92vh;
+  overflow-y: auto;
+  background: #0f131f;
+  border: 1px solid rgba(139, 92, 246, 0.45);
+  border-radius: 14px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.facecam-crop-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.facecam-crop-header h3 {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  color: #fff;
+}
+.facecam-crop-header p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.facecam-calibrator-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.facecam-cal-panel {
+  background: #080b12;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.facecam-cal-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #e2e8f0;
+}
+.cal-coords-pill {
+  margin-left: auto;
+  font-family: monospace;
+  font-size: 10.5px;
+  background: rgba(99, 102, 241, 0.16);
+  color: #a5b4fc;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.facecam-crop-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: 7px;
+  overflow: hidden;
+  cursor: crosshair;
+  user-select: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.facecam-crop-stage canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+.crop-selection-rect {
+  position: absolute;
+  border: 2px solid #38bdf8;
+  background: rgba(56, 189, 248, 0.18);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+  cursor: move;
+  box-sizing: border-box;
+}
+.crop-selection-rect.rect-b {
+  border-color: #c084fc;
+  background: rgba(192, 132, 252, 0.18);
+}
+.crop-box-badge {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+.crop-resize-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  right: -6px;
+  bottom: -6px;
+  background: #fff;
+  border: 2px solid #6366f1;
+  border-radius: 50%;
+  cursor: nwse-resize;
+}
+.facecam-live-preview-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #080b12;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  flex-wrap: wrap;
+}
+.preview-left-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.facecam-preview-pair {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.facecam-preview-thumb {
+  position: relative;
+  width: 78px;
+  height: 78px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid #38bdf8;
+  background: #000;
+}
+.facecam-preview-thumb.thumb-b {
+  border-color: #c084fc;
+}
+.facecam-preview-thumb canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.facecam-preview-thumb span {
+  position: absolute;
+  bottom: 2px;
+  left: 4px;
+  font-size: 9px;
+  font-weight: 800;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.75);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+.facecam-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
