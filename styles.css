@@ -927,7 +927,8 @@ body {
   position: relative;
   overflow: hidden;
 }
-.director-block {
+.director-block,
+.director-cut-block {
   position: absolute;
   top: 4px;
   bottom: 4px;
@@ -940,15 +941,21 @@ body {
   white-space: nowrap;
   cursor: pointer;
 }
-.director-block.pov-a {
+.director-block.pov-a,
+.director-cut-block.pov-a,
+.director-cut-block.pov-A {
   background: rgba(56, 189, 248, 0.45);
   border: 1px solid var(--pov-a);
 }
-.director-block.pov-b {
+.director-block.pov-b,
+.director-cut-block.pov-b,
+.director-cut-block.pov-B {
   background: rgba(192, 132, 252, 0.45);
   border: 1px solid var(--pov-b);
 }
-.director-block.pov-split {
+.director-block.pov-split,
+.director-cut-block.pov-split,
+.director-cut-block.pov-SPLIT {
   background: rgba(245, 158, 11, 0.5);
   border: 1px solid var(--pov-split);
 }
@@ -976,7 +983,7 @@ body {
 
 .fio-tabs {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   border-bottom: 1px solid var(--border);
   background: #0e1118;
   flex-shrink: 0;
@@ -1859,7 +1866,8 @@ body {
   box-shadow: 0 0 10px rgba(56, 189, 248, 0.85);
 }
 
-.director-block.focused-cut-block {
+.director-block.focused-cut-block,
+.director-cut-block.focused-cut-block {
   top: 5px;
   bottom: 5px;
   display: flex;
@@ -2247,4 +2255,621 @@ body {
 .snapshot-time {
   color: var(--text-muted);
   font-size: 10px;
+}
+
+/* =========================================================
+   CO-OP LEFT / RIGHT FLIP & BOTH CAMERAS SIMULTANEOUS MODE
+   ========================================================= */
+.btn-flip-lr {
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fde68a;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.btn-flip-lr:hover {
+  background: rgba(245, 158, 11, 0.25);
+  color: #fff;
+}
+.btn-flip-lr.flipped-active {
+  background: linear-gradient(135deg, #f59e0b, #ea580c);
+  border-color: #fbbf24;
+  color: #fff;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.45);
+}
+
+.both-cams-control-group {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 6px 2px 10px;
+  gap: 6px;
+}
+.both-cams-chip {
+  background: transparent;
+  border: none;
+  padding: 2px 0;
+  font-weight: 700;
+}
+.both-cams-mode-select {
+  background: var(--bg-input);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  outline: none;
+}
+
+.cam-switcher-btn.cam-flip.tally-active {
+  background: rgba(245, 158, 11, 0.24);
+  border-color: #fbbf24;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
+}
+.cam-switcher-btn.cam-both.tally-active {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: #10b981;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+}
+
+/* 1. FLIP LEFT / RIGHT IN 50/50 CO-OP SPLIT MODE */
+.monitors-container.split-mode.flipped-lr #viewportB {
+  left: 0;
+  top: 0;
+  width: 50%;
+  height: 100%;
+}
+.monitors-container.split-mode.flipped-lr #viewportA {
+  left: 50%;
+  top: 0;
+  width: 50%;
+  height: 100%;
+}
+
+/* 2. FLIP LEFT / RIGHT IN CORNER PIP MODE */
+.monitors-container:not(.split-mode):not(.shorts-mode).show-pip.flipped-lr .video-viewport.pip-mate {
+  left: auto;
+  right: 16px;
+  bottom: 16px;
+}
+
+/* 3. BOTH CAMERAS ON SINGLE-POV CUTS: 70/30 DUAL SPOTLIGHT SPLIT */
+.monitors-container.both-cams-70-30:not(.shorts-mode) .video-viewport {
+  top: 0;
+  height: 100%;
+  border-radius: 0;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  z-index: 2;
+}
+.monitors-container.both-cams-70-30:not(.shorts-mode) .video-viewport video {
+  object-fit: cover;
+  object-position: center center;
+}
+/* Normal order: A on Left, B on Right */
+.monitors-container.both-cams-70-30:not(.flipped-lr):not(.shorts-mode) #viewportA.active-pov {
+  left: 0;
+  width: 67%;
+  border-right: 3px solid var(--pov-a);
+}
+.monitors-container.both-cams-70-30:not(.flipped-lr):not(.shorts-mode) #viewportB.pip-mate {
+  left: 67%;
+  width: 33%;
+  border: none;
+  box-shadow: none;
+}
+.monitors-container.both-cams-70-30:not(.flipped-lr):not(.shorts-mode) #viewportB.active-pov {
+  left: 33%;
+  width: 67%;
+  border-left: 3px solid var(--pov-b);
+}
+.monitors-container.both-cams-70-30:not(.flipped-lr):not(.shorts-mode) #viewportA.pip-mate {
+  left: 0;
+  width: 33%;
+  border: none;
+  box-shadow: none;
+}
+/* Flipped order: B on Left, A on Right */
+.monitors-container.both-cams-70-30.flipped-lr:not(.shorts-mode) #viewportB.active-pov {
+  left: 0;
+  width: 67%;
+  border-right: 3px solid var(--pov-b);
+}
+.monitors-container.both-cams-70-30.flipped-lr:not(.shorts-mode) #viewportA.pip-mate {
+  left: 67%;
+  width: 33%;
+  border: none;
+  box-shadow: none;
+}
+.monitors-container.both-cams-70-30.flipped-lr:not(.shorts-mode) #viewportA.active-pov {
+  left: 33%;
+  width: 67%;
+  border-left: 3px solid var(--pov-a);
+}
+.monitors-container.both-cams-70-30.flipped-lr:not(.shorts-mode) #viewportB.pip-mate {
+  left: 0;
+  width: 33%;
+  border: none;
+  box-shadow: none;
+}
+
+/* 4. BOTH CAMERAS ON SINGLE-POV CUTS: DUAL 16:9 UNCROPPED MONITORS */
+.monitors-container.both-cams-16-9:not(.shorts-mode) .video-viewport {
+  top: 0;
+  width: 50%;
+  height: 100%;
+  border-radius: 0;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  z-index: 2;
+  box-shadow: none;
+}
+.monitors-container.both-cams-16-9:not(.shorts-mode) .video-viewport video {
+  object-fit: contain;
+}
+.monitors-container.both-cams-16-9:not(.flipped-lr):not(.shorts-mode) #viewportA {
+  left: 0;
+}
+.monitors-container.both-cams-16-9:not(.flipped-lr):not(.shorts-mode) #viewportB {
+  left: 50%;
+}
+.monitors-container.both-cams-16-9.flipped-lr:not(.shorts-mode) #viewportB {
+  left: 0;
+}
+.monitors-container.both-cams-16-9.flipped-lr:not(.shorts-mode) #viewportA {
+  left: 50%;
+}
+.monitors-container.both-cams-16-9:not(.shorts-mode) #viewportA.active-pov {
+  box-shadow: inset 0 0 0 3px var(--pov-a);
+}
+.monitors-container.both-cams-16-9:not(.shorts-mode) #viewportB.active-pov {
+  box-shadow: inset 0 0 0 3px var(--pov-b);
+}
+/* Active tally highlight when 50/50 split is forced on a 1-POV cut */
+.monitors-container.split-mode.single-pov-focus-a #viewportA {
+  box-shadow: inset 0 0 0 3px var(--pov-a);
+}
+.monitors-container.split-mode.single-pov-focus-b #viewportB {
+  box-shadow: inset 0 0 0 3px var(--pov-b);
+}
+
+/* =========================================================
+   9:16 VERTICAL SHORTS STUDIO CANVAS & LAYOUT ENGINE
+   ========================================================= */
+.fio-player-shell.shorts-aspect {
+  background: radial-gradient(circle at center, #131829 0%, #05070b 75%);
+  padding: 6px 0;
+}
+
+.monitors-container.shorts-mode {
+  aspect-ratio: 9 / 16 !important;
+  height: 100% !important;
+  width: auto !important;
+  max-width: 100%;
+  margin: 0 auto;
+  border-radius: 16px;
+  border: 2px solid rgba(139, 92, 246, 0.65);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.9), 0 0 25px rgba(139, 92, 246, 0.22);
+}
+
+.monitors-container.shorts-mode .video-viewport {
+  cursor: grab;
+}
+.monitors-container.shorts-mode .video-viewport:active {
+  cursor: grabbing;
+}
+
+/* SHORTS LAYOUT 1: STACKED 50/50 TOP & BOTTOM */
+.monitors-container.shorts-mode.shorts-stack-50-50 .video-viewport {
+  left: 0 !important;
+  width: 100% !important;
+  height: 50% !important;
+  border: none !important;
+  border-radius: 0 !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+.monitors-container.shorts-mode.shorts-stack-50-50:not(.flipped-lr) #viewportA {
+  top: 0 !important;
+  bottom: auto !important;
+}
+.monitors-container.shorts-mode.shorts-stack-50-50:not(.flipped-lr) #viewportB {
+  top: 50% !important;
+  bottom: auto !important;
+}
+.monitors-container.shorts-mode.shorts-stack-50-50.flipped-lr #viewportB {
+  top: 0 !important;
+  bottom: auto !important;
+}
+.monitors-container.shorts-mode.shorts-stack-50-50.flipped-lr #viewportA {
+  top: 50% !important;
+  bottom: auto !important;
+}
+.monitors-container.shorts-mode.shorts-stack-50-50 .video-viewport video {
+  object-fit: cover;
+}
+.monitors-container.shorts-mode.shorts-stack-50-50 .split-center-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  left: 0;
+  right: 0;
+  top: 50%;
+  bottom: auto;
+  width: 100%;
+  height: 3px;
+  transform: translateY(-50%);
+  background: linear-gradient(90deg, var(--pov-a), #fff, var(--pov-b));
+}
+
+/* SHORTS LAYOUT 2: STACKED 70/30 HERO + REACTION */
+.monitors-container.shorts-mode.shorts-stack-70-30 .video-viewport {
+  left: 0 !important;
+  width: 100% !important;
+  border: none !important;
+  border-radius: 0 !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+.monitors-container.shorts-mode.shorts-stack-70-30:not(.flipped-lr) #viewportA {
+  top: 0 !important;
+  height: 68% !important;
+  border-bottom: 2.5px solid var(--pov-a) !important;
+}
+.monitors-container.shorts-mode.shorts-stack-70-30:not(.flipped-lr) #viewportB {
+  top: 68% !important;
+  height: 32% !important;
+}
+.monitors-container.shorts-mode.shorts-stack-70-30.flipped-lr #viewportB {
+  top: 0 !important;
+  height: 68% !important;
+  border-bottom: 2.5px solid var(--pov-b) !important;
+}
+.monitors-container.shorts-mode.shorts-stack-70-30.flipped-lr #viewportA {
+  top: 68% !important;
+  height: 32% !important;
+}
+.monitors-container.shorts-mode.shorts-stack-70-30 .video-viewport video {
+  object-fit: cover;
+}
+
+/* SHORTS LAYOUT 3: FULL 9:16 + FLOATING CORNER PIP */
+.monitors-container.shorts-mode.shorts-full-pip .video-viewport.active-pov {
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 1;
+}
+.monitors-container.shorts-mode.shorts-full-pip .video-viewport.active-pov video {
+  object-fit: cover;
+}
+.monitors-container.shorts-mode.shorts-full-pip .video-viewport.pip-mate {
+  width: 44% !important;
+  min-width: 110px !important;
+  aspect-ratio: 16 / 9 !important;
+  height: auto !important;
+  bottom: 52px !important;
+  right: 12px !important;
+  left: auto !important;
+  top: auto !important;
+  z-index: 6;
+  border-radius: 10px !important;
+  border: 2px solid #fff !important;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.85) !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+.monitors-container.shorts-mode.shorts-full-pip.flipped-lr .video-viewport.pip-mate {
+  right: auto !important;
+  left: 12px !important;
+}
+
+/* SHORTS LAYOUT 4: SINGLE FULL 9:16 VERTICAL */
+.monitors-container.shorts-mode.shorts-full-single .video-viewport.active-pov {
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 2;
+}
+.monitors-container.shorts-mode.shorts-full-single .video-viewport.active-pov video {
+  object-fit: cover;
+}
+.monitors-container.shorts-mode.shorts-full-single .video-viewport.pip-mate {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  width: 1px !important;
+  height: 1px !important;
+}
+
+/* SHORTS LAYOUT 5: DUAL 16:9 UNCROPPED STACK */
+.monitors-container.shorts-mode.shorts-dual-letterbox .video-viewport {
+  left: 0 !important;
+  width: 100% !important;
+  height: 50% !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+.monitors-container.shorts-mode.shorts-dual-letterbox:not(.flipped-lr) #viewportA {
+  top: 0 !important;
+}
+.monitors-container.shorts-mode.shorts-dual-letterbox:not(.flipped-lr) #viewportB {
+  top: 50% !important;
+}
+.monitors-container.shorts-mode.shorts-dual-letterbox.flipped-lr #viewportB {
+  top: 0 !important;
+}
+.monitors-container.shorts-mode.shorts-dual-letterbox.flipped-lr #viewportA {
+  top: 50% !important;
+}
+.monitors-container.shorts-mode.shorts-dual-letterbox .video-viewport video {
+  object-fit: contain;
+}
+
+/* SHORTS HOOK CAPTION BANNER OVERLAY */
+.shorts-hook-overlay {
+  position: absolute;
+  top: 38px;
+  left: 10px;
+  right: 10px;
+  z-index: 15;
+  text-align: center;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.shorts-hook-overlay.tiktok_box span {
+  display: inline-block;
+  background: #fff;
+  color: #090b10;
+  font-weight: 900;
+  font-size: 13px;
+  line-height: 1.25;
+  padding: 6px 12px;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.75), 0 3px 0 #f43f5e;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.shorts-hook-overlay.neon_pill span {
+  display: inline-block;
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.95), rgba(147, 51, 234, 0.95));
+  color: #fff;
+  border: 1.5px solid #fde047;
+  font-weight: 900;
+  font-size: 12.5px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.8);
+  text-transform: uppercase;
+}
+.shorts-hook-overlay.clean_bold span {
+  display: inline-block;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fde047;
+  font-weight: 900;
+  font-size: 14px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  text-shadow: 0 2px 6px #000;
+  text-transform: uppercase;
+}
+
+/* SHORTS FORMATTING BAR */
+.shorts-formatting-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: linear-gradient(90deg, #131126 0%, #191632 50%, #131126 100%);
+  border: 1px solid rgba(139, 92, 246, 0.45);
+  border-radius: 10px;
+  padding: 7px 12px;
+  flex-shrink: 0;
+}
+.shorts-fmt-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.shorts-fmt-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #c4b5fd;
+  white-space: nowrap;
+}
+.shorts-layout-pills {
+  display: inline-flex;
+  gap: 4px;
+  background: #0c0a18;
+  padding: 2px;
+  border-radius: 7px;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+.shorts-layout-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.shorts-layout-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.07);
+}
+.shorts-layout-btn.active {
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
+}
+.shorts-pan-slider {
+  width: 64px;
+  cursor: pointer;
+}
+.shorts-pan-val {
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #e2e8f0;
+  min-width: 28px;
+}
+.shorts-hook-input {
+  background: #0b0d15;
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  width: 210px;
+}
+.shorts-hook-style-select {
+  background: #0b0d15;
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  color: #ddd6fe;
+  padding: 4px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* SIDEBAR SHORTS FINDER & CARDS */
+.shorts-finder-box {
+  background: linear-gradient(145deg, rgba(30, 27, 56, 0.85), rgba(18, 21, 32, 0.95));
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.shorts-finder-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.shorts-finder-title {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #fff;
+}
+.shorts-finder-sub {
+  font-size: 10.5px;
+  color: #a5b4fc;
+}
+.shorts-filter-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.shorts-filter-lbl {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 3px;
+}
+.shorts-finder-actions {
+  display: flex;
+  gap: 6px;
+}
+.shorts-mini-pill {
+  background: rgba(139, 92, 246, 0.2);
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.short-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.14s;
+}
+.short-card:hover {
+  border-color: rgba(139, 92, 246, 0.5);
+  background: var(--bg-card-hover);
+}
+.short-card.active-short {
+  border-color: #a855f7;
+  box-shadow: 0 0 0 1px #a855f7, 0 0 16px rgba(168, 85, 247, 0.2);
+  background: rgba(139, 92, 246, 0.12);
+}
+.short-card-top {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+.short-thumb-wrap {
+  position: relative;
+  width: 64px;
+  height: 82px;
+  border-radius: 7px;
+  overflow: hidden;
+  border: 1px solid rgba(139, 92, 246, 0.45);
+  background: #000;
+  cursor: pointer;
+}
+.short-thumb-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.short-9x16-tag {
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #e9d5ff;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+.short-viral-badge {
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.short-layout-chip {
+  background: rgba(99, 102, 241, 0.18);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  color: #c7d2fe;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+.short-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }

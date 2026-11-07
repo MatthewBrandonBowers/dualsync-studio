@@ -31,20 +31,49 @@
       </select>
     </div>
 
-    <!-- CENTER STYLE SWITCHER -->
+    <!-- CENTER STYLE, DUAL-CAM, L/R FLIP & SHORTS FORMAT SWITCHER -->
     <div class="fio-center-controls">
-      <div class="fio-segmented">
-        <button id="btnStyleLudwig" class="seg-btn active" title="Side-by-side co-op split + PiP switching">
-          🔥 Co-Op Style
+      <!-- Aspect Ratio / Format Switcher: 16:9 vs 9:16 Shorts -->
+      <div class="fio-segmented format-segmented" title="Switch between 16:9 Widescreen and 9:16 Vertical Shorts">
+        <button id="btnFormat16x9" class="seg-btn active" title="16:9 Widescreen Video Format">
+          🖥️ 16:9
         </button>
-        <button id="btnStyleClean" class="seg-btn" title="Clean single-POV cinema switching">
-          🎬 Clean Cut
+        <button id="btnFormat9x16" class="seg-btn" title="9:16 Vertical Shorts Formatting Mode (Key 9)">
+          📱 9:16 Shorts
         </button>
       </div>
-      <label class="fio-toggle-chip" title="Always show teammate's POV in a corner Picture-in-Picture box">
-        <input id="chkShowPip" type="checkbox" checked />
-        <span>👥 PiP</span>
-      </label>
+
+      <!-- Co-Op vs Clean Cut -->
+      <div class="fio-segmented">
+        <button id="btnStyleLudwig" class="seg-btn active" title="Side-by-side co-op split + dual camera switching">
+          🔥 Co-Op
+        </button>
+        <button id="btnStyleClean" class="seg-btn" title="Clean single-POV cinema switching">
+          🎬 Clean
+        </button>
+      </div>
+
+      <!-- Flip Left/Right (or Top/Bottom in Shorts) -->
+      <button id="btnFlipLeftRight" class="btn btn-flip-lr btn-xs" title="Flip who is on the Left vs Right (or Top vs Bottom in Shorts) — Key F">
+        ⇄ <span id="flipLrLabel">A | B</span>
+      </button>
+
+      <!-- Enable Both Cameras at the Same Time (even on single-POV cuts) -->
+      <div class="both-cams-control-group" title="Show both cameras simultaneously even when a cut is set to a single POV (A or B)">
+        <label class="fio-toggle-chip both-cams-chip">
+          <input id="chkBothCamsAlways" type="checkbox" checked />
+          <span>👁️ Both Cams</span>
+        </label>
+        <select id="selectBothCamsMode" class="both-cams-mode-select" title="How to display both cameras during a single-POV cut">
+          <option value="pip_corner">Corner PiP</option>
+          <option value="dual_70_30" selected>70/30 Dual Split</option>
+          <option value="dual_50_50">50/50 Co-Op Lock</option>
+          <option value="dual_16_9">Dual 16:9 Monitors</option>
+        </select>
+      </div>
+
+      <!-- Legacy PiP checkbox kept synced for compatibility -->
+      <input id="chkShowPip" type="checkbox" checked class="hidden" />
     </div>
 
     <!-- RIGHT ACTIONS -->
@@ -118,8 +147,8 @@
         </div>
       </div>
 
-      <!-- 16:9 PLAYER -->
-      <div class="fio-player-shell">
+      <!-- 16:9 / 9:16 PLAYER SHELL -->
+      <div id="playerShell" class="fio-player-shell">
         <audio id="masterAudio" src="/api/stream/VOICES?v=6" preload="auto" crossorigin="anonymous"></audio>
         <audio id="desktopAudio" src="/api/stream/DESKTOPS?v=6" preload="auto" crossorigin="anonymous"></audio>
         <div id="monitorsContainer" class="monitors-container view-director ludwig-style show-pip">
@@ -143,9 +172,14 @@
             </div>
           </div>
 
-          <!-- CENTER DIVIDER FOR 50/50 SPLIT -->
+          <!-- CENTER DIVIDER FOR 50/50 SPLIT OR VERTICAL STACK -->
           <div id="splitCenterDivider" class="split-center-divider">
-            <span class="vs-pill">CO-OP</span>
+            <span id="splitDividerPill" class="vs-pill">CO-OP</span>
+          </div>
+
+          <!-- SHORTS 9:16 HOOK TITLE & CAPTION OVERLAY -->
+          <div id="shortsHookOverlay" class="shorts-hook-overlay tiktok_box hidden" title="Click or use Shorts Formatting bar to edit Hook Title">
+            <span id="shortsHookTextDisplay">WE HAVE 2 HOURS TO BEAT MINECRAFT ⏱️🔥</span>
           </div>
 
           <!-- TOP-CENTER ACTIVE FRAMING PILL -->
@@ -157,6 +191,55 @@
           <div id="trimDragTooltip" class="trim-drag-tooltip hidden">
             ✂️ Dragging Trim Handle...
           </div>
+        </div>
+      </div>
+
+      <!-- 9:16 SHORTS FORMATTING BAR (Appears in Shorts Mode) -->
+      <div id="shortsFormattingBar" class="shorts-formatting-bar hidden">
+        <div class="shorts-fmt-group">
+          <span class="shorts-fmt-label">📱 Shorts Layout:</span>
+          <div id="shortsLayoutPills" class="shorts-layout-pills">
+            <button type="button" class="shorts-layout-btn active" data-shorts-layout="stack_50_50" title="Stacked 50/50 Top & Bottom Split">🥞 50/50 Stack</button>
+            <button type="button" class="shorts-layout-btn" data-shorts-layout="stack_70_30" title="70% Hero POV + 30% Teammate Reaction">🎯 70/30 Hero</button>
+            <button type="button" class="shorts-layout-btn" data-shorts-layout="full_pip" title="Full 9:16 Vertical + Floating Corner PiP">🖼️ Full + PiP</button>
+            <button type="button" class="shorts-layout-btn" data-shorts-layout="full_single" title="Full 9:16 Vertical Single Camera">🎬 Single 9:16</button>
+            <button type="button" class="shorts-layout-btn" data-shorts-layout="dual_letterbox" title="Two Uncropped 16:9 Frames Stacked">📺 Dual 16:9</button>
+          </div>
+        </div>
+
+        <div class="shorts-fmt-group">
+          <button id="btnShortsFlipOrder" type="button" class="btn btn-flip-lr btn-xs" title="Swap Top & Bottom cameras (Key F)">
+            ⇄ <span id="shortsFlipOrderLabel">Top: A · Bot: B</span>
+          </button>
+        </div>
+
+        <div class="shorts-fmt-group shorts-crop-group" title="Slide horizontal crop center (or drag directly on video in 9:16 preview)">
+          <span class="shorts-fmt-label">🟦 Pan A:</span>
+          <input id="sliderShortsPanA" type="range" min="0" max="100" step="1" value="50" class="shorts-pan-slider slider-matt" />
+          <span id="labelShortsPanA" class="shorts-pan-val">50%</span>
+          <span class="shorts-fmt-label" style="margin-left:6px;">🟪 Pan B:</span>
+          <input id="sliderShortsPanB" type="range" min="0" max="100" step="1" value="50" class="shorts-pan-slider slider-lee" />
+          <span id="labelShortsPanB" class="shorts-pan-val">50%</span>
+          <span class="shorts-fmt-label" style="margin-left:6px;">🔍 Zoom:</span>
+          <input id="sliderShortsZoom" type="range" min="100" max="180" step="5" value="100" class="shorts-pan-slider" style="width:58px;" />
+          <span id="labelShortsZoom" class="shorts-pan-val">1.0x</span>
+          <button id="btnShortsResetCrop" type="button" class="btn btn-ghost btn-xxs" title="Reset crop to center">↺ Center</button>
+        </div>
+
+        <div class="shorts-fmt-group shorts-hook-group">
+          <span class="shorts-fmt-label">💬 Hook:</span>
+          <input id="inputShortsHookText" type="text" class="shorts-hook-input" value="WE HAVE 2 HOURS TO BEAT MINECRAFT ⏱️🔥" placeholder="Viral hook banner..." />
+          <select id="selectShortsHookStyle" class="shorts-hook-style-select" title="Hook caption style">
+            <option value="tiktok_box" selected>TikTok Box</option>
+            <option value="neon_pill">Neon Gaming</option>
+            <option value="clean_bold">Clean Bold</option>
+            <option value="none">Hide Text</option>
+          </select>
+        </div>
+
+        <div class="shorts-fmt-group shorts-actions-group">
+          <button id="btnCreateShortFromCurrent" type="button" class="btn btn-accent btn-xs" title="Save current range & formatting as a Short">➕ Save Short</button>
+          <button id="btnExportActiveShortMp4" type="button" class="btn btn-primary btn-xs" title="Render & download 9:16 Vertical MP4 Short">📥 Export 9:16 MP4</button>
         </div>
       </div>
 
@@ -193,7 +276,7 @@
           <span class="switcher-deck-label">CAM:</span>
           <button id="btnSwitchPovA" class="cam-switcher-btn cam-a" data-pov="A" title="Switch to POV A (Key 1)">
             <span class="cam-key">1</span>
-            <span class="cam-title">🟦 A + PiP</span>
+            <span class="cam-title">🟦 A</span>
           </button>
           <button id="btnSwitchPovSplit" class="cam-switcher-btn cam-split" data-pov="SPLIT" title="50/50 Split (Key 2)">
             <span class="cam-key">2</span>
@@ -201,7 +284,15 @@
           </button>
           <button id="btnSwitchPovB" class="cam-switcher-btn cam-b" data-pov="B" title="Switch to POV B (Key 3)">
             <span class="cam-key">3</span>
-            <span class="cam-title">🟪 B + PiP</span>
+            <span class="cam-title">🟪 B</span>
+          </button>
+          <button id="btnDeckFlipLR" class="cam-switcher-btn cam-flip" type="button" title="Flip Left & Right cameras (Key F)">
+            <span class="cam-key">F</span>
+            <span id="deckFlipTitle" class="cam-title">⇄ A|B</span>
+          </button>
+          <button id="btnDeckBothCams" class="cam-switcher-btn cam-both tally-active" type="button" title="Enable both cameras at the same time even on single-POV cuts (Key B)">
+            <span class="cam-key">B</span>
+            <span id="deckBothTitle" class="cam-title">👁️ Both</span>
           </button>
           <label class="live-punch-toggle" title="Pressing 1/2/3 while playing auto-splits a new cut at the playhead">
             <input id="chkLivePunchCut" type="checkbox" checked />
@@ -396,9 +487,10 @@
     <aside class="fio-sidebar">
       <div class="fio-tabs">
         <button class="fio-tab active" data-tab="scenes">🎬 Scenes <span id="clipCountBadge" class="tab-badge">0</span></button>
+        <button class="fio-tab" data-tab="shorts">📱 Shorts <span id="shortsCountBadge" class="tab-badge">12</span></button>
         <button class="fio-tab" data-tab="comments">💬 Notes <span id="commentCountBadge" class="tab-badge">0</span></button>
-        <button class="fio-tab" data-tab="reference">📺 Reference</button>
-        <button class="fio-tab" data-tab="settings">⚙️ Settings</button>
+        <button class="fio-tab" data-tab="reference">📺 Ref</button>
+        <button class="fio-tab" data-tab="settings">⚙️ Setup</button>
       </div>
 
       <!-- TAB 1: SCENES + AI DIRECTOR -->
@@ -434,7 +526,59 @@
         <div id="highlightsList" class="fio-scenes-list"></div>
       </div>
 
-      <!-- TAB 2: COMMENTS -->
+      <!-- TAB 2: VIRAL SHORTS FINDER & 9:16 SHORTS STUDIO -->
+      <div id="tabPane_shorts" class="fio-tab-pane">
+        <div class="shorts-finder-box">
+          <div class="shorts-finder-top">
+            <div>
+              <div class="shorts-finder-title">🔍 Find Viral Shorts</div>
+              <div class="shorts-finder-sub">Scan 2-hour session for vertical 9:16 moments</div>
+            </div>
+            <button id="btnToggleShortsFormatQuick" type="button" class="btn btn-primary btn-xs" title="Toggle 9:16 Vertical Shorts Preview">
+              📱 9:16 View
+            </button>
+          </div>
+
+          <div class="shorts-filter-grid">
+            <div class="shorts-filter-col">
+              <label class="shorts-filter-lbl">Vibe / Category</label>
+              <select id="selectShortsFilterCat" class="select-input">
+                <option value="all" selected>🔥 All Viral Moments</option>
+                <option value="funny">😂 Co-Op Laughs &amp; Banter</option>
+                <option value="clutch">⚔️ Clutch &amp; Survival</option>
+                <option value="action">💥 Fast Action &amp; Combat</option>
+                <option value="story">🏆 Milestones &amp; Climax</option>
+              </select>
+            </div>
+            <div class="shorts-filter-col">
+              <label class="shorts-filter-lbl">Target Duration</label>
+              <select id="selectShortsFilterDur" class="select-input">
+                <option value="15-60" selected>All (15s – 60s)</option>
+                <option value="15-30">⚡ Quick (15s – 30s)</option>
+                <option value="30-45">🎬 Standard (30s – 45s)</option>
+                <option value="45-60">🔥 Full (45s – 60s)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="shorts-finder-actions">
+            <button id="btnFindShorts" type="button" class="btn btn-primary btn-xs" style="flex:1;">
+              🔍 Find Shorts from Footage
+            </button>
+            <button id="btnNewShortAtPlayhead" type="button" class="btn btn-accent btn-xs" title="Create a 9:16 Short at current playhead time">
+              ➕ Create @ Playhead
+            </button>
+          </div>
+        </div>
+
+        <div class="pane-subheader" style="display:flex;justify-content:space-between;align-items:center;">
+          <span>Click any Short to preview &amp; format in 9:16</span>
+          <span id="shortsActiveStatusPill" class="shorts-mini-pill">Ready</span>
+        </div>
+        <div id="shortsList" class="fio-scenes-list shorts-cards-list"></div>
+      </div>
+
+      <!-- TAB 3: COMMENTS -->
       <div id="tabPane_comments" class="fio-tab-pane">
         <div class="pane-subheader">
           <span>Frame-Accurate Review Notes</span>

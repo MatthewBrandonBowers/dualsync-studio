@@ -607,41 +607,183 @@ let lastUiPov = "";
 let timelineMode = "scene";
 let lockedTimelineWindow = null;
 
+// Co-Op Left/Right Flip, Both Cameras Always-On & 9:16 Shorts Formatting State
+let isFlippedLR = localStorage.getItem("dualsync_flipped_lr") === "1";
+let bothCamsEnabled = localStorage.getItem("dualsync_both_cams_enabled") !== "0";
+let bothCamsMode = localStorage.getItem("dualsync_both_cams_mode") || "dual_70_30";
+let isShortsMode = false;
+let shortsLayout = "stack_50_50";
+let shortsPanA = 50;
+let shortsPanB = 50;
+let shortsZoom = 100;
+let shortsHookText = "WE HAVE 2 HOURS TO BEAT MINECRAFT ⏱️🔥";
+let shortsHookStyle = "tiktok_box";
+let shortsListState = [];
+let activeShortId = null;
+
+function applyShortsCropTransform() {
+  if (!el.videoA || !el.videoB) return;
+  if (isShortsMode && shortsLayout !== "dual_letterbox") {
+    const scale = Math.max(1.0, Math.min(2.0, shortsZoom / 100.0));
+    el.videoA.style.objectPosition = `${shortsPanA}% 50%`;
+    el.videoB.style.objectPosition = `${shortsPanB}% 50%`;
+    el.videoA.style.transform = scale > 1.005 ? `scale(${scale.toFixed(2)})` : "";
+    el.videoB.style.transform = scale > 1.005 ? `scale(${scale.toFixed(2)})` : "";
+  } else {
+    el.videoA.style.objectPosition = "";
+    el.videoB.style.objectPosition = "";
+    el.videoA.style.transform = "";
+    el.videoB.style.transform = "";
+  }
+}
+
+function updateFlipAndBothCamsUI(effFlip, effBoth) {
+  const nameA = (el.playerAName?.value || "A").split(" ")[0];
+  const nameB = (el.playerBName?.value || "B").split(" ")[0];
+
+  const flipLbl = document.getElementById("flipLrLabel");
+  if (flipLbl) flipLbl.textContent = effFlip ? `${nameB} | ${nameA}` : `${nameA} | ${nameB}`;
+
+  const deckFlipTitle = document.getElementById("deckFlipTitle");
+  if (deckFlipTitle) deckFlipTitle.textContent = effFlip ? `⇄ ${nameB}|${nameA}` : `⇄ ${nameA}|${nameB}`;
+
+  const shortsFlipLbl = document.getElementById("shortsFlipOrderLabel");
+  if (shortsFlipLbl) {
+    shortsFlipLbl.textContent = effFlip
+      ? `Top: ${nameB} · Bot: ${nameA}`
+      : `Top: ${nameA} · Bot: ${nameB}`;
+  }
+
+  document.getElementById("btnFlipLeftRight")?.classList.toggle("flipped-active", effFlip);
+  document.getElementById("btnShortsFlipOrder")?.classList.toggle("flipped-active", effFlip);
+  document.getElementById("btnDeckFlipLR")?.classList.toggle("tally-active", effFlip);
+  document.getElementById("btnDeckBothCams")?.classList.toggle("tally-active", effBoth);
+
+  const chkBoth = document.getElementById("chkBothCamsAlways");
+  if (chkBoth && chkBoth.checked !== effBoth) chkBoth.checked = effBoth;
+  const selBoth = document.getElementById("selectBothCamsMode");
+  if (selBoth && selBoth.value !== bothCamsMode) selBoth.value = bothCamsMode;
+}
+
 function updateDirectorViewportUI(t) {
   const info = getNearestOrCurrentHighlight(t);
   const activeInfo = getActiveCutAtTime(t);
   const pov = activeInfo ? activeInfo.cut.active_pov : "A";
+
+  const effFlip =
+    activeInfo && activeInfo.cut && activeInfo.cut.flip_lr != null
+      ? Boolean(activeInfo.cut.flip_lr)
+      : isFlippedLR;
+  const effBoth =
+    activeInfo && activeInfo.cut && activeInfo.cut.both_cams != null
+      ? Boolean(activeInfo.cut.both_cams)
+      : bothCamsEnabled;
+
   const showPip =
-    syncEngineMode === "single_decoder"
+    syncEngineMode === "single_decoder" && !effBoth && !isShortsMode
       ? false
-      : document.getElementById("chkShowPip")?.checked !== false;
+      : effBoth && bothCamsMode === "pip_corner";
 
-  const nameA = el.playerAName?.value || "A";
-  const nameB = el.playerBName?.value || "B";
+  const nameA = (el.playerAName?.value || "Player A").replace(/\s*\(POV [AB]\)/i, "");
+  const nameB = (el.playerBName?.value || "Player B").replace(/\s*\(POV [AB]\)/i, "");
 
-  const povKey = `${pov}_${showPip ? 1 : 0}`;
+  const povKey = `${pov}_${effFlip ? 1 : 0}_${effBoth ? 1 : 0}_${bothCamsMode}_${isShortsMode ? 1 : 0}_${shortsLayout}_${shortsPanA}_${shortsPanB}_${shortsZoom}_${shortsHookStyle}_${shortsHookText}`;
   if (povKey !== lastUiPov) {
     lastUiPov = povKey;
-    el.monitorsContainer.classList.toggle("show-pip", showPip);
-    el.monitorsContainer.classList.remove("split-mode");
+    updateFlipAndBothCamsUI(effFlip, effBoth);
+    applyShortsCropTransform();
+
+    const playerShell = document.getElementById("playerShell");
+    if (playerShell) playerShell.classList.toggle("shorts-aspect", isShortsMode);
+
+    el.monitorsContainer.classList.remove(
+      "split-mode",
+      "show-pip",
+      "flipped-lr",
+      "both-cams-70-30",
+      "both-cams-16-9",
+      "single-pov-focus-a",
+      "single-pov-focus-b",
+      "shorts-mode",
+      "shorts-stack-50-50",
+      "shorts-stack-70-30",
+      "shorts-full-pip",
+      "shorts-full-single",
+      "shorts-dual-letterbox"
+    );
     el.viewportA.classList.remove("active-pov", "pip-mate");
     el.viewportB.classList.remove("active-pov", "pip-mate");
 
-    if (pov === "A") {
-      el.viewportA.classList.add("active-pov");
-      el.viewportB.classList.add("pip-mate");
-      el.liveDirectorBadge.textContent = showPip
-        ? `🟦 ${nameA} + PiP`
-        : `🟦 ${nameA}`;
-    } else if (pov === "B") {
-      el.viewportB.classList.add("active-pov");
-      el.viewportA.classList.add("pip-mate");
-      el.liveDirectorBadge.textContent = showPip
-        ? `🟪 ${nameB} + PiP`
-        : `🟪 ${nameB}`;
-    } else {
+    if (effFlip) {
+      el.monitorsContainer.classList.add("flipped-lr");
+    }
+
+    const hookOverlay = document.getElementById("shortsHookOverlay");
+    const hookTextSpan = document.getElementById("shortsHookTextDisplay");
+    if (hookOverlay && hookTextSpan) {
+      if (isShortsMode && shortsHookStyle !== "none" && shortsHookText.trim()) {
+        hookOverlay.className = `shorts-hook-overlay ${shortsHookStyle}`;
+        hookTextSpan.textContent = shortsHookText;
+      } else {
+        hookOverlay.className = "shorts-hook-overlay hidden";
+      }
+    }
+
+    if (isShortsMode) {
+      const layoutClass = `shorts-${shortsLayout.replace(/_/g, "-")}`;
+      el.monitorsContainer.classList.add("shorts-mode", layoutClass);
+      const primaryIsB = (pov === "B") ^ (effFlip && (shortsLayout === "full_pip" || shortsLayout === "full_single"));
+      if (primaryIsB) {
+        el.viewportB.classList.add("active-pov");
+        el.viewportA.classList.add("pip-mate");
+      } else {
+        el.viewportA.classList.add("active-pov");
+        el.viewportB.classList.add("pip-mate");
+      }
+      const orderText = effFlip ? `${nameB} ⬆⬇ ${nameA}` : `${nameA} ⬆⬇ ${nameB}`;
+      el.liveDirectorBadge.textContent = `📱 9:16 SHORT (${orderText})`;
+    } else if (pov === "SPLIT" || (effBoth && bothCamsMode === "dual_50_50")) {
       el.monitorsContainer.classList.add("split-mode");
-      el.liveDirectorBadge.textContent = `⚡ 50/50 Split`;
+      if (pov === "A") el.monitorsContainer.classList.add("single-pov-focus-a");
+      if (pov === "B") el.monitorsContainer.classList.add("single-pov-focus-b");
+      const orderText = effFlip ? `${nameB} ◀▶ ${nameA}` : `${nameA} ◀▶ ${nameB}`;
+      el.liveDirectorBadge.textContent =
+        pov === "SPLIT"
+          ? `⚡ 50/50 Split (${orderText})`
+          : `👁️ 50/50 Both Cams · ${pov === "A" ? nameA : nameB} Focus (${orderText})`;
+    } else if (effBoth && bothCamsMode === "dual_70_30") {
+      el.monitorsContainer.classList.add("both-cams-70-30");
+      if (pov === "B") {
+        el.viewportB.classList.add("active-pov");
+        el.viewportA.classList.add("pip-mate");
+      } else {
+        el.viewportA.classList.add("active-pov");
+        el.viewportB.classList.add("pip-mate");
+      }
+      const orderText = effFlip ? `${nameB} | ${nameA}` : `${nameA} | ${nameB}`;
+      el.liveDirectorBadge.textContent = `👁️ Both Cams 70/30 · ${pov === "A" ? nameA : nameB} (${orderText})`;
+    } else if (effBoth && bothCamsMode === "dual_16_9") {
+      el.monitorsContainer.classList.add("both-cams-16-9");
+      if (pov === "B") {
+        el.viewportB.classList.add("active-pov");
+        el.viewportA.classList.add("pip-mate");
+      } else {
+        el.viewportA.classList.add("active-pov");
+        el.viewportB.classList.add("pip-mate");
+      }
+      const orderText = effFlip ? `${nameB} | ${nameA}` : `${nameA} | ${nameB}`;
+      el.liveDirectorBadge.textContent = `👁️ Dual 16:9 · ${pov === "A" ? nameA : nameB} (${orderText})`;
+    } else {
+      el.monitorsContainer.classList.toggle("show-pip", showPip);
+      if (pov === "A") {
+        el.viewportA.classList.add("active-pov");
+        el.viewportB.classList.add("pip-mate");
+        el.liveDirectorBadge.textContent = showPip ? `🟦 ${nameA} + PiP` : `🟦 ${nameA}`;
+      } else {
+        el.viewportB.classList.add("active-pov");
+        el.viewportA.classList.add("pip-mate");
+        el.liveDirectorBadge.textContent = showPip ? `🟪 ${nameB} + PiP` : `🟪 ${nameB}`;
+      }
     }
 
     document.getElementById("btnSwitchPovA")?.classList.toggle("tally-active", pov === "A");
@@ -1043,7 +1185,15 @@ function syncVideosToMasterTime(t, forceSeek = false) {
 
   const activeInfo = getActiveCutAtTime(masterTime);
   const activePov = activeInfo ? activeInfo.cut.active_pov : "A";
-  const singleDecoderActive = syncEngineMode === "single_decoder" && isPlaying && !forceSeek;
+  const cutBothCams = activeInfo?.cut?.both_cams !== undefined && activeInfo?.cut?.both_cams !== null
+    ? Boolean(activeInfo.cut.both_cams)
+    : bothCamsEnabled;
+  const singleDecoderActive =
+    syncEngineMode === "single_decoder" &&
+    !cutBothCams &&
+    !isShortsMode &&
+    isPlaying &&
+    !forceSeek;
 
   const ma = document.getElementById("masterAudio");
   const da = document.getElementById("desktopAudio");
@@ -1124,6 +1274,16 @@ function tickPlayback() {
     masterTime = el.videoA.currentTime;
   } else {
     masterTime += (1 / 60) * (userPlaybackSpeed || 1.0);
+  }
+
+  if (isShortsMode && activeShortId && shortsListState.length > 0) {
+    const activeShort = shortsListState.find((s) => s.id === activeShortId);
+    if (activeShort && prevT >= activeShort.start_sec - 0.5 && masterTime >= activeShort.end_sec) {
+      syncVideosToMasterTime(activeShort.start_sec, true);
+      prevTickMasterTime = masterTime;
+      rafId = requestAnimationFrame(tickPlayback);
+      return;
+    }
   }
 
   if (el.chkPlayHighlightsOnly.checked && projectState?.highlights?.length) {
@@ -2444,6 +2604,15 @@ window.addEventListener("keydown", (e) => {
   } else if (e.key.toLowerCase() === "h") {
     e.preventDefault();
     addHighlightAtPlayhead();
+  } else if (e.key.toLowerCase() === "f") {
+    e.preventDefault();
+    toggleFlipLeftRight();
+  } else if (e.key.toLowerCase() === "b") {
+    e.preventDefault();
+    toggleBothCams();
+  } else if (e.key === "9") {
+    e.preventDefault();
+    setShortsMode(!isShortsMode);
   } else if (e.key === "[") {
     el.btnPrevCut.click();
   } else if (e.key === "]") {
@@ -3057,10 +3226,662 @@ function initPlaybackTunerUI() {
 }
 
 // =========================================================================
+// CO-OP FLIP LEFT/RIGHT, BOTH CAMERAS ON 1-POV, & 9:16 SHORTS STUDIO
+// =========================================================================
+
+async function toggleFlipLeftRight() {
+  isFlippedLR = !isFlippedLR;
+  localStorage.setItem("dualsync_flip_lr", String(isFlippedLR));
+
+  // Also persist flip_lr onto the active cut if we're inside a scene
+  const activeInfo = getActiveCutAtTime(masterTime);
+  if (activeInfo?.cut) {
+    pushUndoState("Flip Left/Right");
+    activeInfo.cut.flip_lr = isFlippedLR;
+  }
+
+  // If an active Short is selected, update its flip_lr too
+  if (activeShortId) {
+    const sh = shortsListState.find((s) => s.id === activeShortId);
+    if (sh) {
+      sh.flip_lr = isFlippedLR;
+      saveShortsState();
+    }
+  }
+
+  lastUiPov = "";
+  updateFlipAndBothCamsUI();
+  updateDirectorViewportUI(masterTime);
+  if (activeInfo?.cut) {
+    saveHighlightsToServer();
+  }
+}
+
+async function toggleBothCams(forceVal = null) {
+  bothCamsEnabled = forceVal !== null ? Boolean(forceVal) : !bothCamsEnabled;
+  localStorage.setItem("dualsync_both_cams", String(bothCamsEnabled));
+
+  const activeInfo = getActiveCutAtTime(masterTime);
+  if (activeInfo?.cut) {
+    pushUndoState("Toggle Both Cameras");
+    activeInfo.cut.both_cams = bothCamsEnabled;
+  }
+
+  lastUiPov = "";
+  updateFlipAndBothCamsUI();
+  syncVideosToMasterTime(masterTime, false);
+  if (activeInfo?.cut) {
+    saveHighlightsToServer();
+  }
+}
+
+function setShortsMode(enable) {
+  isShortsMode = Boolean(enable);
+  const playerShell = document.getElementById("playerShell");
+  const fmtBar = document.getElementById("shortsFormattingBar");
+  const btn16x9 = document.getElementById("btnFormat16x9");
+  const btn9x16 = document.getElementById("btnFormat9x16");
+  const btnQuick = document.getElementById("btnToggleShortsFormatQuick");
+  const hookOverlay = document.getElementById("shortsHookOverlay");
+
+  playerShell?.classList.toggle("shorts-aspect", isShortsMode);
+  fmtBar?.classList.toggle("hidden", !isShortsMode);
+  btn16x9?.classList.toggle("active", !isShortsMode);
+  btn9x16?.classList.toggle("active", isShortsMode);
+  if (btnQuick) {
+    btnQuick.textContent = isShortsMode ? "🖥️ Switch to 16:9 Canvas" : "📱 Switch to 9:16 Canvas";
+  }
+
+  if (hookOverlay) {
+    hookOverlay.classList.toggle("hidden", !isShortsMode || !shortsHookText || shortsHookStyle === "none");
+  }
+
+  lastUiPov = "";
+  updateFlipAndBothCamsUI();
+  applyShortsCropTransform();
+  syncVideosToMasterTime(masterTime, false);
+
+  if (isShortsMode) {
+    switchSidebarTab("shorts");
+  }
+}
+
+function setShortsLayout(layout) {
+  shortsLayout = layout || "stack_50_50";
+  document.querySelectorAll("#shortsLayoutPills .tuner-pill").forEach((btn) => {
+    btn.classList.toggle("active", btn.getAttribute("data-short-layout") === shortsLayout);
+  });
+
+  if (activeShortId) {
+    const sh = shortsListState.find((s) => s.id === activeShortId);
+    if (sh) {
+      sh.layout = shortsLayout;
+      saveShortsState();
+      renderShortsList();
+    }
+  }
+
+  lastUiPov = "";
+  updateDirectorViewportUI(masterTime);
+}
+
+function updateHookBannerUI() {
+  const hookOverlay = document.getElementById("shortsHookOverlay");
+  const hookTextEl = document.getElementById("shortsHookTextDisplay");
+  const inpHook = document.getElementById("inputShortsHookText");
+  const selStyle = document.getElementById("selectShortsHookStyle");
+
+  if (inpHook && document.activeElement !== inpHook) {
+    inpHook.value = shortsHookText || "";
+  }
+  if (selStyle) {
+    selStyle.value = shortsHookStyle || "top_banner";
+  }
+
+  if (hookTextEl) {
+    hookTextEl.textContent = shortsHookText || "";
+  }
+  if (hookOverlay) {
+    hookOverlay.classList.remove("style-top_banner", "style-center_split");
+    if (shortsHookStyle === "center_split") {
+      hookOverlay.classList.add("style-center_split");
+    } else {
+      hookOverlay.classList.add("style-top_banner");
+    }
+    const shouldHide = !isShortsMode || !shortsHookText.trim() || shortsHookStyle === "none";
+    hookOverlay.classList.toggle("hidden", shouldHide);
+  }
+}
+
+async function loadShorts() {
+  let loaded = null;
+  if (!IS_STATIC_CLOUD) {
+    try {
+      const r = await fetch("/api/shorts");
+      if (r.ok) {
+        const data = await r.json();
+        if (Array.isArray(data.shorts)) loaded = data.shorts;
+      }
+    } catch (_) {}
+  }
+
+  if (!loaded) {
+    try {
+      const localSaved = localStorage.getItem("dualsync_shorts_v1");
+      if (localSaved) {
+        const parsed = JSON.parse(localSaved);
+        if (Array.isArray(parsed) && parsed.length > 0) loaded = parsed;
+      }
+    } catch (_) {}
+  }
+
+  if (!loaded) {
+    try {
+      const rStatic = await fetch(`./shorts_state.json?v=${Date.now()}`);
+      if (rStatic.ok) {
+        const data = await rStatic.json();
+        if (Array.isArray(data.shorts)) loaded = data.shorts;
+      }
+    } catch (_) {}
+  }
+
+  shortsListState = Array.isArray(loaded) ? loaded : [];
+  renderShortsList();
+}
+
+async function saveShortsState() {
+  try {
+    localStorage.setItem("dualsync_shorts_v1", JSON.stringify(shortsListState));
+  } catch (_) {}
+
+  if (!IS_STATIC_CLOUD) {
+    try {
+      await fetch("/api/shorts/update", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(shortsListState),
+      });
+      setSaveStatus("saved");
+    } catch (_) {}
+  }
+}
+
+function renderShortsList() {
+  const listEl = document.getElementById("shortsList");
+  const badgeEl = document.getElementById("shortsCountBadge");
+  const catFilter = document.getElementById("selectShortsFilterCat")?.value || "all";
+  const durFilter = parseFloat(document.getElementById("selectShortsFilterDur")?.value || "90");
+
+  if (badgeEl) badgeEl.textContent = String(shortsListState.length);
+  if (!listEl) return;
+
+  const filtered = shortsListState.filter((s) => {
+    const dur = (s.end_sec || 0) - (s.start_sec || 0);
+    if (durFilter < 90 && dur > durFilter + 2) return false;
+    if (catFilter !== "all" && (s.category || "").toLowerCase() !== catFilter) return false;
+    return true;
+  });
+
+  listEl.innerHTML = "";
+  if (filtered.length === 0) {
+    listEl.innerHTML = `<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:0.75rem;">No Shorts match this filter. Click <b>🔍 Find Viral Shorts</b> or <b>+ Clip Current Moment</b>.</div>`;
+    return;
+  }
+
+  const layoutLabels = {
+    stack_50_50: "50/50 Stack",
+    stack_70_30: "70/30 Hero",
+    full_pip: "9:16 + PiP",
+    full_single: "Single 9:16",
+    dual_letterbox: "Dual 16:9",
+  };
+
+  filtered.forEach((sh) => {
+    const dur = Math.max(1, Math.round((sh.end_sec || 0) - (sh.start_sec || 0)));
+    const isActive = sh.id === activeShortId;
+    const thumbSrc = (sh.thumbnail_url || "").replace(/^\/thumbnails\//, "./thumbnails/");
+    const layoutTag = layoutLabels[sh.layout] || "50/50 Stack";
+    const flipTag = sh.flip_lr ? "B | A" : "A | B";
+    const score = sh.virality_score || 92;
+
+    const card = document.createElement("div");
+    card.className = `short-card ${isActive ? "active" : ""}`;
+    card.innerHTML = `
+      <div class="short-card-top">
+        ${thumbSrc ? `<img class="short-card-thumb" src="${thumbSrc}" alt="Short preview" loading="lazy" />` : `<div class="short-card-thumb"></div>`}
+        <div class="short-card-info">
+          <div class="short-card-title-row">
+            <span class="short-card-title">${sh.title || "Untitled Short"}</span>
+            <span class="short-virality-badge">🔥 ${score}%</span>
+          </div>
+          <div class="short-card-hook">"${sh.hook_text || sh.title || ""}"</div>
+          <div class="short-card-meta">
+            <span class="short-meta-pill">${formatTime(sh.start_sec)} – ${formatTime(sh.end_sec)} (${dur}s)</span>
+            <span class="short-meta-pill">${layoutTag}</span>
+            <span class="short-meta-pill">⇄ ${flipTag}</span>
+            <span class="short-meta-pill">${(sh.category || "viral").toUpperCase()}</span>
+          </div>
+        </div>
+      </div>
+      <div class="short-card-actions">
+        <button class="btn btn-xs btn-accent" data-short-preview="${sh.id}">📱 Format in 9:16</button>
+        <button class="btn btn-xs btn-secondary" data-short-flip="${sh.id}" title="Flip Top/Bottom camera order">⇄ Flip</button>
+        <button class="btn btn-xs btn-primary" data-short-export="${sh.id}">⬇ MP4</button>
+        <button class="btn btn-xs btn-ghost" data-short-del="${sh.id}" title="Delete Short">✕</button>
+      </div>
+    `;
+
+    card.addEventListener("click", (e) => {
+      if (e.target.closest("button")) return;
+      openShortInStudio(sh, true);
+    });
+
+    listEl.appendChild(card);
+  });
+
+  listEl.querySelectorAll("[data-short-preview]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = btn.getAttribute("data-short-preview");
+      const sh = shortsListState.find((x) => x.id === id);
+      if (sh) openShortInStudio(sh, true);
+    });
+  });
+
+  listEl.querySelectorAll("[data-short-flip]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = btn.getAttribute("data-short-flip");
+      const sh = shortsListState.find((x) => x.id === id);
+      if (sh) {
+        sh.flip_lr = !sh.flip_lr;
+        if (activeShortId === sh.id) {
+          isFlippedLR = Boolean(sh.flip_lr);
+          updateFlipAndBothCamsUI();
+          lastUiPov = "";
+          updateDirectorViewportUI(masterTime);
+        }
+        saveShortsState();
+        renderShortsList();
+      }
+    });
+  });
+
+  listEl.querySelectorAll("[data-short-export]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = btn.getAttribute("data-short-export");
+      exportShortMp4(id);
+    });
+  });
+
+  listEl.querySelectorAll("[data-short-del]").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const id = btn.getAttribute("data-short-del");
+      shortsListState = shortsListState.filter((x) => x.id !== id);
+      if (activeShortId === id) activeShortId = null;
+      if (!IS_STATIC_CLOUD) {
+        try { await fetch(`/api/shorts/${id}`, { method: "DELETE" }); } catch (_) {}
+      }
+      saveShortsState();
+      renderShortsList();
+    });
+  });
+}
+
+function openShortInStudio(sh, autoEnter9x16 = true) {
+  if (!sh) return;
+  activeShortId = sh.id;
+  shortsLayout = sh.layout || "stack_50_50";
+  isFlippedLR = Boolean(sh.flip_lr);
+  shortsPanA = sh.pan_a !== undefined ? Number(sh.pan_a) : 50;
+  shortsPanB = sh.pan_b !== undefined ? Number(sh.pan_b) : 50;
+  shortsZoom = sh.zoom !== undefined ? Number(sh.zoom) : 1.0;
+  shortsHookText = sh.hook_text !== undefined ? sh.hook_text : (sh.title || "");
+
+  // Update sliders & layout buttons
+  const sldPanA = document.getElementById("sliderShortsPanA");
+  const sldPanB = document.getElementById("sliderShortsPanB");
+  const sldZoom = document.getElementById("sliderShortsZoom");
+  if (sldPanA) sldPanA.value = String(shortsPanA);
+  if (sldPanB) sldPanB.value = String(shortsPanB);
+  if (sldZoom) sldZoom.value = String(shortsZoom);
+
+  document.querySelectorAll("#shortsLayoutPills .tuner-pill").forEach((btn) => {
+    btn.classList.toggle("active", btn.getAttribute("data-short-layout") === shortsLayout);
+  });
+
+  if (autoEnter9x16 && !isShortsMode) {
+    setShortsMode(true);
+  } else {
+    updateFlipAndBothCamsUI();
+    applyShortsCropTransform();
+    updateHookBannerUI();
+  }
+
+  renderShortsList();
+  syncVideosToMasterTime(sh.start_sec, true);
+  startPlayback();
+}
+
+async function findViralShortsFromUI() {
+  const cat = document.getElementById("selectShortsFilterCat")?.value || "all";
+  const maxDur = parseFloat(document.getElementById("selectShortsFilterDur")?.value || "60");
+  const btn = document.getElementById("btnFindShorts");
+  const origText = btn ? btn.textContent : "🔍 Find Viral Shorts";
+  if (btn) btn.textContent = "⏳ Scanning Co-Op...";
+
+  try {
+    if (!IS_STATIC_CLOUD) {
+      const r = await fetch("/api/shorts/find", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: cat, min_dur_sec: 12.0, max_dur_sec: maxDur }),
+      });
+      if (r.ok) {
+        const data = await r.json();
+        if (Array.isArray(data.shorts)) {
+          shortsListState = data.shorts;
+          saveShortsState();
+        }
+      }
+    } else if (projectState?.highlights?.length) {
+      // Static cloud fallback: ensure any high-action scenes are also surfaced as Shorts
+      const existingStarts = new Set(shortsListState.map((s) => Math.round(s.start_sec / 10)));
+      projectState.highlights.forEach((hl, idx) => {
+        const key = Math.round(hl.start_sec / 10);
+        if (!existingStarts.has(key)) {
+          const clipEnd = Math.min(hl.end_sec, hl.start_sec + Math.min(maxDur, 35));
+          if (clipEnd - hl.start_sec >= 10) {
+            shortsListState.push({
+              id: `short_cloud_${idx}_${Date.now()}`,
+              title: hl.title || `Scene ${idx + 1} Short`,
+              hook_text: (hl.title || "WAIT FOR IT...").toUpperCase(),
+              start_sec: hl.start_sec,
+              end_sec: clipEnd,
+              layout: idx % 2 === 0 ? "stack_50_50" : "stack_70_30",
+              primary_pov: "SPLIT",
+              flip_lr: idx % 3 === 1,
+              pan_a: 50,
+              pan_b: 50,
+              zoom: 1.0,
+              virality_score: Math.max(82, 96 - idx),
+              category: (hl.category || "action").toLowerCase(),
+              reason: hl.description || "High-energy co-op highlight",
+              thumbnail_url: hl.thumbnail_url || "",
+            });
+            existingStarts.add(key);
+          }
+        }
+      });
+      saveShortsState();
+    }
+    renderShortsList();
+    if (shortsListState.length > 0 && !activeShortId) {
+      openShortInStudio(shortsListState[0], true);
+    }
+  } finally {
+    if (btn) btn.textContent = origText;
+  }
+}
+
+async function createShortAtPlayhead() {
+  const startSec = Number(Math.max(0, masterTime).toFixed(2));
+  const maxDur = getMasterDuration();
+  const endSec = Number(Math.min(maxDur, startSec + 28.0).toFixed(2));
+  const nearHl = getNearestOrCurrentHighlight(masterTime)?.highlight;
+  const defaultTitle = nearHl ? `${nearHl.title} (Short)` : `Co-Op Short @ ${formatTime(startSec)}`;
+  const hook = shortsHookText?.trim() || (nearHl ? nearHl.title.toUpperCase() : "WAIT FOR IT...");
+
+  const newShort = {
+    id: `short_${Date.now()}`,
+    title: defaultTitle,
+    hook_text: hook,
+    start_sec: startSec,
+    end_sec: endSec,
+    layout: shortsLayout || "stack_50_50",
+    primary_pov: "SPLIT",
+    flip_lr: isFlippedLR,
+    pan_a: shortsPanA,
+    pan_b: shortsPanB,
+    zoom: shortsZoom,
+    virality_score: 95,
+    category: "funny",
+    reason: "Custom clipped Short at playhead",
+    thumbnail_url: nearHl?.thumbnail_url || "./thumbnails/scene_00_371s.jpg",
+  };
+
+  if (!IS_STATIC_CLOUD) {
+    try {
+      const r = await fetch("/api/shorts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newShort),
+      });
+      if (r.ok) {
+        const data = await r.json();
+        if (Array.isArray(data.shorts)) {
+          shortsListState = data.shorts;
+        }
+      }
+    } catch (_) {
+      shortsListState.unshift(newShort);
+    }
+  } else {
+    shortsListState.unshift(newShort);
+  }
+
+  saveShortsState();
+  openShortInStudio(newShort, true);
+}
+
+async function exportShortMp4(shortId = null) {
+  const targetId = shortId || activeShortId || (shortsListState[0] && shortsListState[0].id);
+  if (!targetId) {
+    await createShortAtPlayhead();
+    return;
+  }
+  const sh = shortsListState.find((x) => x.id === targetId);
+  if (!sh) return;
+
+  if (IS_STATIC_CLOUD && (!resolvedBackendBaseUrl || resolvedBackendBaseUrl === "CLOUD")) {
+    alert("To render a 9:16 vertical MP4 file with FFmpeg, connect to the local studio server or active Cloudflare tunnel.");
+    return;
+  }
+
+  const base = IS_STATIC_CLOUD ? resolvedBackendBaseUrl : "";
+  showStatus(`Rendering 9:16 Short "${sh.title}" (${Math.round(sh.end_sec - sh.start_sec)}s)...`);
+  try {
+    const r = await fetch(`${base}/api/shorts/${encodeURIComponent(sh.id)}/export?pw=leelai`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        layout: sh.id === activeShortId ? shortsLayout : sh.layout,
+        flip_lr: sh.id === activeShortId ? isFlippedLR : sh.flip_lr,
+        pan_a: sh.id === activeShortId ? shortsPanA : sh.pan_a,
+        pan_b: sh.id === activeShortId ? shortsPanB : sh.pan_b,
+        zoom: sh.id === activeShortId ? shortsZoom : sh.zoom,
+        hook_text: sh.id === activeShortId ? shortsHookText : sh.hook_text,
+      }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || "Failed to export 9:16 Short");
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(sh.title || "dualsync_short").replace(/[^a-z0-9_-]+/gi, "_").toLowerCase()}_9x16.mp4`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert(`Short Export Error: ${err.message}`);
+  } finally {
+    hideStatus();
+  }
+}
+
+function initCoopAndShortsControls() {
+  // 1. Flip Left/Right buttons
+  document.getElementById("btnFlipLeftRight")?.addEventListener("click", () => toggleFlipLeftRight());
+  document.getElementById("btnDeckFlipLR")?.addEventListener("click", () => toggleFlipLeftRight());
+  document.getElementById("btnShortsFlipOrder")?.addEventListener("click", () => toggleFlipLeftRight());
+
+  // 2. Both Cameras on 1-POV controls
+  const chkBoth = document.getElementById("chkBothCamsAlways");
+  chkBoth?.addEventListener("change", (e) => toggleBothCams(e.target.checked));
+  document.getElementById("btnDeckBothCams")?.addEventListener("click", () => toggleBothCams());
+
+  const selBothMode = document.getElementById("selectBothCamsMode");
+  if (selBothMode) {
+    selBothMode.value = bothCamsMode;
+    selBothMode.addEventListener("change", (e) => {
+      bothCamsMode = e.target.value || "dual_70_30";
+      localStorage.setItem("dualsync_both_cams_mode", bothCamsMode);
+      if (!bothCamsEnabled) {
+        toggleBothCams(true);
+      } else {
+        lastUiPov = "";
+        updateFlipAndBothCamsUI();
+        updateDirectorViewportUI(masterTime);
+      }
+    });
+  }
+
+  // 3. Aspect Ratio Format Switcher (16:9 vs 9:16 Shorts)
+  document.getElementById("btnFormat16x9")?.addEventListener("click", () => setShortsMode(false));
+  document.getElementById("btnFormat9x16")?.addEventListener("click", () => setShortsMode(true));
+  document.getElementById("btnToggleShortsFormatQuick")?.addEventListener("click", () => setShortsMode(!isShortsMode));
+
+  // 4. Shorts Formatting Bar Controls
+  document.querySelectorAll("#shortsLayoutPills .tuner-pill").forEach((btn) => {
+    btn.addEventListener("click", () => setShortsLayout(btn.getAttribute("data-short-layout")));
+  });
+
+  const syncActiveShortCrop = () => {
+    applyShortsCropTransform();
+    if (activeShortId) {
+      const sh = shortsListState.find((x) => x.id === activeShortId);
+      if (sh) {
+        sh.pan_a = shortsPanA;
+        sh.pan_b = shortsPanB;
+        sh.zoom = shortsZoom;
+        saveShortsState();
+      }
+    }
+  };
+
+  document.getElementById("sliderShortsPanA")?.addEventListener("input", (e) => {
+    shortsPanA = parseFloat(e.target.value) || 50;
+    syncActiveShortCrop();
+  });
+  document.getElementById("sliderShortsPanB")?.addEventListener("input", (e) => {
+    shortsPanB = parseFloat(e.target.value) || 50;
+    syncActiveShortCrop();
+  });
+  document.getElementById("sliderShortsZoom")?.addEventListener("input", (e) => {
+    shortsZoom = parseFloat(e.target.value) || 1.0;
+    syncActiveShortCrop();
+  });
+  document.getElementById("btnShortsResetCrop")?.addEventListener("click", () => {
+    shortsPanA = 50;
+    shortsPanB = 50;
+    shortsZoom = 1.0;
+    const sA = document.getElementById("sliderShortsPanA");
+    const sB = document.getElementById("sliderShortsPanB");
+    const sZ = document.getElementById("sliderShortsZoom");
+    if (sA) sA.value = "50";
+    if (sB) sB.value = "50";
+    if (sZ) sZ.value = "1.0";
+    syncActiveShortCrop();
+  });
+
+  // Direct horizontal drag-to-reframe on viewports when in 9:16 Shorts mode
+  const attachDragReframe = (viewportEl, isCamA) => {
+    if (!viewportEl) return;
+    viewportEl.addEventListener("mousedown", (e) => {
+      if (!isShortsMode || e.button !== 0) return;
+      if (e.target.closest("button, input, select")) return;
+      const startX = e.clientX;
+      const startPan = isCamA ? shortsPanA : shortsPanB;
+      const rect = viewportEl.getBoundingClientRect();
+      const width = Math.max(100, rect.width);
+
+      const onMove = (me) => {
+        const dx = me.clientX - startX;
+        const deltaPct = -(dx / width) * 100;
+        const nextPan = Math.max(0, Math.min(100, Math.round(startPan + deltaPct)));
+        if (isCamA) {
+          shortsPanA = nextPan;
+          const sA = document.getElementById("sliderShortsPanA");
+          if (sA) sA.value = String(shortsPanA);
+        } else {
+          shortsPanB = nextPan;
+          const sB = document.getElementById("sliderShortsPanB");
+          if (sB) sB.value = String(shortsPanB);
+        }
+        applyShortsCropTransform();
+      };
+
+      const onUp = () => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        syncActiveShortCrop();
+      };
+
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    });
+  };
+  attachDragReframe(el.viewportA, true);
+  attachDragReframe(el.viewportB, false);
+
+  // Hook text & style
+  document.getElementById("inputShortsHookText")?.addEventListener("input", (e) => {
+    shortsHookText = e.target.value;
+    updateHookBannerUI();
+    if (activeShortId) {
+      const sh = shortsListState.find((x) => x.id === activeShortId);
+      if (sh) {
+        sh.hook_text = shortsHookText;
+        saveShortsState();
+      }
+    }
+  });
+  document.getElementById("selectShortsHookStyle")?.addEventListener("change", (e) => {
+    shortsHookStyle = e.target.value || "top_banner";
+    updateHookBannerUI();
+  });
+  document.getElementById("shortsHookOverlay")?.addEventListener("click", () => {
+    const inp = document.getElementById("inputShortsHookText");
+    if (inp) {
+      inp.focus();
+      inp.select();
+    }
+  });
+
+  // Save/Create Short & Export buttons
+  document.getElementById("btnCreateShortFromCurrent")?.addEventListener("click", () => createShortAtPlayhead());
+  document.getElementById("btnNewShortAtPlayhead")?.addEventListener("click", () => createShortAtPlayhead());
+  document.getElementById("btnExportActiveShortMp4")?.addEventListener("click", () => exportShortMp4(activeShortId));
+  document.getElementById("btnFindShorts")?.addEventListener("click", () => findViralShortsFromUI());
+  document.getElementById("selectShortsFilterCat")?.addEventListener("change", () => renderShortsList());
+  document.getElementById("selectShortsFilterDur")?.addEventListener("change", () => renderShortsList());
+
+  updateFlipAndBothCamsUI();
+  updateHookBannerUI();
+}
+
+// =========================================================================
 // INIT
 // =========================================================================
 (async function initStudio() {
   initPlaybackTunerUI();
+  initCoopAndShortsControls();
   initUserSystem();
   renderSnapshotsList();
   updateUndoRedoButtons();
@@ -3196,4 +4017,5 @@ function initPlaybackTunerUI() {
 
   // Load project list for the project selector
   await loadProjectList();
+  await loadShorts();
 })();
