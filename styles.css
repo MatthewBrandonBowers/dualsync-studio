@@ -350,7 +350,6 @@ body {
 .monitors-container {
   width: 100%;
   height: 100%;
-  max-aspect-ratio: 16 / 9;
   position: relative;
   background: #000;
   overflow: hidden;
@@ -366,7 +365,7 @@ body {
 .video-viewport video {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   display: block;
 }
 
@@ -376,6 +375,10 @@ body {
   width: 100%;
   height: 100%;
   z-index: 1;
+}
+
+.monitors-container:not(.split-mode):not(.shorts-mode):not(.both-cams-70-30):not(.both-cams-16-9) .video-viewport.active-pov video {
+  object-fit: fill;
 }
 
 .monitors-container:not(.split-mode).show-pip .video-viewport.pip-mate {
@@ -2413,7 +2416,7 @@ body {
   box-shadow: none;
 }
 .monitors-container.both-cams-16-9:not(.shorts-mode) .video-viewport video {
-  object-fit: contain;
+  object-fit: cover;
 }
 .monitors-container.both-cams-16-9:not(.flipped-lr):not(.shorts-mode) #viewportA {
   left: 0;
@@ -2610,7 +2613,7 @@ body {
   top: 50% !important;
 }
 .monitors-container.shorts-mode.shorts-dual-letterbox .video-viewport video {
-  object-fit: contain;
+  object-fit: cover;
 }
 
 /* SHORTS HOOK CAPTION BANNER OVERLAY */
@@ -3062,7 +3065,7 @@ body {
   flex: 1 1 50%;
   height: 100%;
   overflow: hidden;
-  background: #080b12;
+  background: transparent;
   cursor: pointer;
 }
 .facecam-crop-box + .facecam-crop-box {
