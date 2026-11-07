@@ -1,0 +1,62 @@
+{
+  "status": "needs_review",
+  "style_preset": "ludwig_coop",
+  "show_hud": true,
+  "show_pip": true,
+  "youtube_reference": {
+    "url": "https://www.youtube.com/watch?v=0szxanBi6_c&t=1070s",
+    "video_id": "0szxanBi6_c",
+    "title": "I BEAT the Hardest Gaming Challenge in the World",
+    "author": "Ludwig (w/ CDawgVA)",
+    "chapter_title": "The Lovers VS The World (17:50)",
+    "start_sec": 1070,
+    "clip_url": "/yt_ref_1070.mp4",
+    "style_notes": [
+      "Full-Height 50/50 Center-Cropped Split during co-op banter & shared climax moments (no top/bottom black bars)",
+      "Instant Full-Screen POV cut to active player during combat with corner Teammate PiP Cam",
+      "Bottom-Right Challenge Progress Tracker + Live Run Timer HUD"
+    ]
+  },
+  "comments": [
+    {
+      "id": "cmt_1",
+      "author": "Matthew",
+      "role": "POV A",
+      "timestamp_sec": 374.0,
+      "scene_number": 1,
+      "text": "Opening 50/50 split sets up the 2-hour challenge nicely \u2014 let's keep both reactions visible here.",
+      "resolved": false,
+      "created_at": "18:14"
+    },
+    {
+      "id": "cmt_2",
+      "author": "Leelai",
+      "role": "POV B",
+      "timestamp_sec": 2028.0,
+      "scene_number": 7,
+      "text": "The Nether Portal ignition looks great in Ludwig-style full-height split!",
+      "resolved": false,
+      "created_at": "18:47"
+    },
+    {
+      "id": "cmt_3",
+      "author": "Matthew",
+      "role": "POV A",
+      "timestamp_sec": 5447.0,
+      "scene_number": 16,
+      "text": "Check if we want +5s longer on the End Portal eye placement before jumping in.",
+      "resolved": false,
+      "created_at": "19:44"
+    },
+    {
+      "id": "cmt_4",
+      "author": "Leelai",
+      "role": "POV B",
+      "timestamp_sec": 7668.0,
+      "scene_number": 21,
+      "text": "FINAL DRAGON KILL! Full-height 50/50 split at 02:07:48 just like 'The Lovers VS The World' climax.",
+      "resolved": false,
+      "created_at": "20:21"
+    }
+  ]
+}
