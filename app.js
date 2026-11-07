@@ -6,8 +6,171 @@ let projectState = null;
 let masterTime = 366.0;
 let isPlaying = false;
 let zoomFactor = 1.0;
-let viewMode = "director"; // Default to Final Product View
+let viewMode = "director";
 let rafId = null;
+
+// =========================================================================
+// UNDO / REDO SYSTEM
+// =========================================================================
+const MAX_UNDO_DEPTH = 50;
+let undoStack = [];
+let redoStack = [];
+
+function deepCloneHighlights() {
+  if (!projectState?.highlights) return null;
+  return JSON.parse(JSON.stringify(projectState.highlights));
+}
+
+function pushUndoState(label = "edit") {
+  const snap = deepCloneHighlights();
+  if (!snap) return;
+  undoStack.push({ highlights: snap, label, time: Date.now() });
+  if (undoStack.length > MAX_UNDO_DEPTH) undoStack.shift();
+  redoStack = []; // clear redo on new edit
+  updateUndoRedoButtons();
+}
+
+function performUndo() {
+  if (undoStack.length === 0 || !projectState?.highlights) return;
+  const current = deepCloneHighlights();
+  redoStack.push({ highlights: current, label: "redo", time: Date.now() });
+  const prev = undoStack.pop();
+  projectState.highlights = prev.highlights;
+  saveHighlightsToServer(true); // skip pushing undo
+  updateUndoRedoButtons();
+}
+
+function performRedo() {
+  if (redoStack.length === 0 || !projectState?.highlights) return;
+  const current = deepCloneHighlights();
+  undoStack.push({ highlights: current, label: "undo", time: Date.now() });
+  const next = redoStack.pop();
+  projectState.highlights = next.highlights;
+  saveHighlightsToServer(true);
+  updateUndoRedoButtons();
+}
+
+function updateUndoRedoButtons() {
+  const undoBtn = document.getElementById("btnUndoAction");
+  const redoBtn = document.getElementById("btnRedoAction");
+  if (undoBtn) {
+    undoBtn.disabled = undoStack.length === 0;
+    undoBtn.title = undoStack.length > 0
+      ? `Undo (${undoStack.length}) — Ctrl+Z`
+      : "Nothing to undo";
+  }
+  if (redoBtn) {
+    redoBtn.disabled = redoStack.length === 0;
+    redoBtn.title = redoStack.length > 0
+      ? `Redo (${redoStack.length}) — Ctrl+Shift+Z`
+      : "Nothing to redo";
+  }
+}
+
+// =========================================================================
+// AUTO-SAVE SYSTEM
+// =========================================================================
+let autoSaveTimer = null;
+let lastSavedJson = "";
+
+function setSaveStatus(status) {
+  const indicator = document.getElementById("saveStatusIndicator");
+  const dot = document.getElementById("saveStatusDot");
+  const text = document.getElementById("saveStatusText");
+  if (!indicator || !dot || !text) return;
+
+  indicator.className = `save-status-indicator ${status}`;
+  dot.className = `save-dot ${status}`;
+  if (status === "saving") {
+    text.textContent = "Saving...";
+  } else if (status === "saved") {
+    text.textContent = "Saved";
+  } else {
+    text.textContent = "Unsaved";
+  }
+}
+
+function scheduleAutoSave() {
+  if (autoSaveTimer) clearTimeout(autoSaveTimer);
+  setSaveStatus("unsaved");
+  autoSaveTimer = setTimeout(async () => {
+    setSaveStatus("saving");
+    await saveHighlightsToServer(true);
+    setSaveStatus("saved");
+  }, 2000);
+}
+
+// =========================================================================
+// LOGIN / USER SYSTEM
+// =========================================================================
+let currentUser = null; // { username: "matthew", display_name: "Matthew", avatar_color: "#38bdf8" }
+let currentProjectId = null; // Multi-project: currently active project ID
+
+function initUserSystem() {
+  const stored = localStorage.getItem("dualsync_current_user");
+  if (stored) {
+    try { currentUser = JSON.parse(stored); } catch (_) {}
+  }
+  // Fetch from server if available
+  if (!IS_STATIC_CLOUD) {
+    fetch("/api/auth/me").then(r => {
+      if (r.ok) return r.json();
+      throw new Error("not authed");
+    }).then(user => {
+      currentUser = user;
+      localStorage.setItem("dualsync_current_user", JSON.stringify(currentUser));
+      updateUserUI();
+    }).catch(() => {});
+  }
+  updateUserUI();
+}
+
+function updateUserUI() {
+  const avatar = document.getElementById("userAvatarInitial");
+  const displayName = document.getElementById("userDisplayName");
+  const commentAuthor = document.getElementById("commentAuthorSelect");
+  const avatarBtn = document.getElementById("btnUserMenu");
+
+  if (currentUser) {
+    if (avatar) avatar.textContent = currentUser.display_name[0].toUpperCase();
+    if (displayName) displayName.textContent = currentUser.display_name;
+    if (commentAuthor) commentAuthor.value = currentUser.display_name;
+    if (avatarBtn && currentUser.avatar_color) {
+      avatarBtn.style.background = currentUser.avatar_color;
+    }
+  } else {
+    if (avatar) avatar.textContent = "?";
+    if (displayName) displayName.textContent = "Not signed in";
+  }
+}
+
+// User menu toggle
+document.getElementById("btnUserMenu")?.addEventListener("click", () => {
+  const menu = document.getElementById("userDropdownMenu");
+  if (menu) menu.classList.toggle("hidden");
+});
+
+document.getElementById("btnLogout")?.addEventListener("click", async () => {
+  if (!IS_STATIC_CLOUD) {
+    try { await fetch("/api/auth/logout", { method: "POST" }); } catch (_) {}
+  }
+  currentUser = null;
+  localStorage.removeItem("dualsync_current_user");
+  localStorage.removeItem("dualsync_pw_ok");
+  document.cookie = "dualsync_auth=; max-age=0; path=/";
+  document.cookie = "dualsync_user=; max-age=0; path=/";
+  updateUserUI();
+  window.location.reload();
+});
+
+// Close user menu on click outside
+document.addEventListener("click", (e) => {
+  const wrap = document.getElementById("userMenuWrap");
+  const menu = document.getElementById("userDropdownMenu");
+  if (wrap && menu && !wrap.contains(e.target)) {
+    menu.classList.add("hidden");
+  }
+});
 
 // DOM Elements
 const el = {
@@ -108,6 +271,119 @@ function hideStatus() {
   el.statusBanner.classList.add("hidden");
 }
 
+// =========================================================================
+// MULTI-PROJECT SYSTEM
+// =========================================================================
+async function loadProjectList() {
+  if (IS_STATIC_CLOUD) return;
+  const projectSelector = document.getElementById("projectSelector");
+  if (!projectSelector) return;
+
+  try {
+    const resp = await fetch("/api/projects");
+    if (!resp.ok) return;
+    const { projects } = await resp.json();
+
+    projectSelector.innerHTML = "";
+    if (projects.length === 0) {
+      const opt = document.createElement("option");
+      opt.value = "__current__";
+      opt.textContent = "Current Project";
+      projectSelector.appendChild(opt);
+      return;
+    }
+
+    projects.forEach((p, i) => {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      const by = p.created_by ? ` — ${p.created_by}` : "";
+      opt.textContent = `${p.name}${by} (${p.scene_count} scenes)`;
+      if (currentProjectId && p.id === currentProjectId) {
+        opt.selected = true;
+      } else if (!currentProjectId && i === 0) {
+        opt.selected = true;
+        currentProjectId = p.id;
+      }
+      projectSelector.appendChild(opt);
+    });
+  } catch (_) {}
+}
+
+async function switchProject(projectId) {
+  if (IS_STATIC_CLOUD || !projectId || projectId === "__current__") return;
+
+  showStatus("Loading project...");
+  try {
+    const resp = await fetch(`/api/projects/${projectId}`);
+    if (!resp.ok) throw new Error("Failed to load project");
+    const projData = await resp.json();
+    currentProjectId = projectId;
+
+    // Update the highlights in the current project state
+    if (projData.highlights && projData.highlights.length > 0) {
+      pushUndoState("switch project");
+      projectState.highlights = projData.highlights;
+      await saveHighlightsToServer(true);
+    }
+
+    // Update project name
+    if (el.projectNameInput && projData.name) {
+      el.projectNameInput.value = projData.name;
+    }
+
+    showStatus(`Loaded: ${projData.name}`);
+    setTimeout(hideStatus, 2000);
+  } catch (err) {
+    showStatus(`Error: ${err.message}`);
+    setTimeout(hideStatus, 3000);
+  }
+}
+
+async function createNewProject() {
+  const name = prompt("New project name:", "");
+  if (!name || !name.trim()) return;
+
+  try {
+    const resp = await fetch("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    if (!resp.ok) throw new Error("Failed to create project");
+    const projData = await resp.json();
+    currentProjectId = projData.id;
+    await loadProjectList();
+    showStatus(`Created: ${projData.name}`);
+    setTimeout(hideStatus, 2000);
+  } catch (err) {
+    alert(`Error: ${err.message}`);
+  }
+}
+
+async function autoSaveToProject() {
+  if (IS_STATIC_CLOUD || !currentProjectId || currentProjectId === "__current__") return;
+  try {
+    await fetch(`/api/projects/${currentProjectId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        highlights: projectState?.highlights || [],
+        name: el.projectNameInput?.value || "Untitled",
+      }),
+    });
+  } catch (_) {}
+}
+
+// Project selector change handler
+document.getElementById("projectSelector")?.addEventListener("change", (e) => {
+  const val = e.target.value;
+  if (val === "__new__") {
+    createNewProject();
+  } else {
+    switchProject(val);
+  }
+});
+
 function formatTime(sec) {
   const s = Math.max(0, Number(sec) || 0);
   const hrs = Math.floor(s / 3600);
@@ -141,8 +417,6 @@ function getBaseOffsetSec() {
 
 function getEffectiveOffsetAtTime(t) {
   if (projectState?.track_a?.duration_sec > 1000 && !projectState?.track_a?.filename?.includes("demo_")) {
-    // Exact forensic crystal clock drift formula across the 2-hour session (-31.3 ppm),
-    // aligned to the exact millisecond Leelai HEARS Matthew's voice (294.150s, eliminating the 690ms hearing lag & slapback echo!):
     return 294.150 - 0.0000313 * t;
   }
   const active = getActiveCutAtTime(t);
@@ -174,17 +448,20 @@ function renderState(state, reloadVideos = false) {
   const prevUrlB = projectState?.track_b?.media_url;
   projectState = state;
 
-  el.projectNameInput.value = state.project_name || "Dual-POV Session";
-  el.playerAName.value = state.player_a_name || "Player A";
-  el.playerBName.value = state.player_b_name || "Player B";
-  el.overlayLabelA.textContent = `POV A — ${el.playerAName.value}`;
-  el.overlayLabelB.textContent = `POV B — ${el.playerBName.value}`;
-  el.tlLabelA.textContent = `🟦 Matt Mic (0:a:2)`;
-  el.tlLabelB.textContent = `🟪 Leelai Mic (0:a:1)`;
+  el.projectNameInput.value = state.project_name || "Untitled Project";
+
+  const nameA = state.player_a_name || "Player A";
+  const nameB = state.player_b_name || "Player B";
+  el.playerAName.value = nameA;
+  el.playerBName.value = nameB;
+  el.overlayLabelA.textContent = nameA;
+  el.overlayLabelB.textContent = nameB;
+  el.tlLabelA.textContent = `🟦 Mic A`;
+  el.tlLabelB.textContent = `🟪 Mic B`;
 
   if (state.track_a) {
     const ta = state.track_a;
-    el.trackAMeta.textContent = `${ta.filename} • ${ta.width}x${ta.height} @ ${ta.fps}fps • ${(ta.duration_sec / 60).toFixed(1)}m (${ta.file_size_mb} MB)`;
+    el.trackAMeta.textContent = `${ta.filename} · ${ta.width}×${ta.height} @ ${ta.fps}fps · ${(ta.duration_sec / 60).toFixed(1)}m`;
     populateAudioStreamSelect(el.audioStreamA, ta.audio_streams);
     if (reloadVideos || ta.media_url !== prevUrlA) {
       el.videoA.src = ta.media_url;
@@ -196,7 +473,7 @@ function renderState(state, reloadVideos = false) {
 
   if (state.track_b) {
     const tb = state.track_b;
-    el.trackBMeta.textContent = `${tb.filename} • ${tb.width}x${tb.height} @ ${tb.fps}fps • ${(tb.duration_sec / 60).toFixed(1)}m (${tb.file_size_mb} MB)`;
+    el.trackBMeta.textContent = `${tb.filename} · ${tb.width}×${tb.height} @ ${tb.fps}fps · ${(tb.duration_sec / 60).toFixed(1)}m`;
     populateAudioStreamSelect(el.audioStreamB, tb.audio_streams);
     if (reloadVideos || tb.media_url !== prevUrlB) {
       el.videoB.src = tb.media_url;
@@ -213,7 +490,7 @@ function renderState(state, reloadVideos = false) {
     el.syncOffsetValue.textContent = `${sign}${effOff.toFixed(3)}s`;
     const fps = state.track_a?.fps || 30.0;
     const frames = Math.round(effOff * fps);
-    el.syncFramesValue.textContent = `${frames >= 0 ? "+" : ""}${frames} f`;
+    el.syncFramesValue.textContent = `${frames >= 0 ? "+" : ""}${frames}f`;
     el.syncConfidenceValue.textContent = `${state.sync.confidence.toFixed(1)}%`;
     el.syncStateBadge.textContent = `Synced (${state.sync.confidence.toFixed(1)}%)`;
     el.syncStateBadge.className = "badge badge-success";
@@ -221,13 +498,13 @@ function renderState(state, reloadVideos = false) {
 
   const clips = state.highlights || [];
   const enabledClips = clips.filter((c) => c.enabled);
-  el.clipCountBadge.textContent = `${enabledClips.length}/${clips.length} Scenes`;
+  el.clipCountBadge.textContent = `${enabledClips.length}`;
 
   const totalStorySec = enabledClips.reduce((acc, c) => acc + Math.max(0, c.end_sec - c.start_sec), 0);
   const sMins = Math.floor(totalStorySec / 60);
   const sSecs = Math.round(totalStorySec % 60);
   if (el.totalStoryDurationLabel) {
-    el.totalStoryDurationLabel.textContent = `${sMins}m ${String(sSecs).padStart(2, "0")}s (${enabledClips.length} Scenes)`;
+    el.totalStoryDurationLabel.textContent = `${sMins}m ${String(sSecs).padStart(2, "0")}s`;
   }
 
   if (state.last_analysis_source) {
@@ -297,8 +574,8 @@ function renderChapterPills() {
     pill.setAttribute("data-hl-idx", String(idx));
     const num = hl.scene_number || idx + 1;
     const shortTitle = hl.title.length > 22 ? hl.title.slice(0, 20) + "…" : hl.title;
-    pill.textContent = `S${num}: ${shortTitle}`;
-    pill.title = `[${hl.act}] Scene ${num}: ${hl.title} (${formatTime(hl.start_sec)} – ${formatTime(hl.end_sec)})`;
+    pill.textContent = `${num}: ${shortTitle}`;
+    pill.title = `Scene ${num}: ${hl.title} (${formatTime(hl.start_sec)} – ${formatTime(hl.end_sec)})`;
     pill.addEventListener("click", () => {
       syncVideosToMasterTime(hl.start_sec + 0.05, true);
     });
@@ -315,45 +592,6 @@ function renderChapterPills() {
   });
 }
 
-const CHALLENGE_MILESTONES = [
-  { t: 0, label: "Spawn & Iron Gear" },
-  { t: 1800, label: "Enter The Nether" },
-  { t: 3600, label: "Blaze Rods & Pearls" },
-  { t: 5000, label: "Locate Stronghold" },
-  { t: 5900, label: "Slay Ender Dragon" },
-];
-
-function updateLudwigHudAtTime(t) {
-  const hudTimer = document.getElementById("hudRunTimer");
-  const hudFrac = document.getElementById("hudProgressFraction");
-  const hudStack = document.getElementById("hudMilestoneStack");
-  const cmtBadge = document.getElementById("commentTimeBadge");
-
-  // Run timer relative to challenge start (366s)
-  const runSec = Math.max(0, t - 366.0);
-  if (hudTimer) hudTimer.textContent = formatMasterTimecode(runSec);
-  if (cmtBadge) cmtBadge.textContent = `@ ${formatTime(t)}`;
-
-  let stageIdx = 0;
-  for (let i = 0; i < CHALLENGE_MILESTONES.length; i++) {
-    if (t >= CHALLENGE_MILESTONES[i].t) stageIdx = i;
-  }
-  if (hudFrac) hudFrac.textContent = `${stageIdx + 1}/${CHALLENGE_MILESTONES.length}`;
-  if (hudStack) {
-    const prev = stageIdx > 0 ? CHALLENGE_MILESTONES[stageIdx - 1].label : "2-Hour Timer Started";
-    const curr = CHALLENGE_MILESTONES[stageIdx].label;
-    const next =
-      stageIdx + 1 < CHALLENGE_MILESTONES.length
-        ? CHALLENGE_MILESTONES[stageIdx + 1].label
-        : "Challenge Complete! 🏆";
-    hudStack.innerHTML = `
-      <div class="hud-ms prev">✓ ${prev}</div>
-      <div class="hud-ms current">▶ ${curr}</div>
-      <div class="hud-ms next">○ ${next}</div>
-    `;
-  }
-}
-
 function updateFrameioScrubberPosition(t) {
   const totalDur = getMasterDuration();
   const pct = Math.max(0, Math.min(100, (t / totalDur) * 100));
@@ -366,8 +604,8 @@ function updateFrameioScrubberPosition(t) {
 let lastRenderedSceneIdx = -1;
 let lastUiSceneIdx = -1;
 let lastUiPov = "";
-let timelineMode = "scene"; // "scene" (Focused Scene Trim with Draggable Handles) or "full" (Full 2h Map)
-let lockedTimelineWindow = null; // Locked [winStart, winEnd] while dragging a trim handle
+let timelineMode = "scene";
+let lockedTimelineWindow = null;
 
 function updateDirectorViewportUI(t) {
   const info = getNearestOrCurrentHighlight(t);
@@ -377,6 +615,9 @@ function updateDirectorViewportUI(t) {
     syncEngineMode === "single_decoder"
       ? false
       : document.getElementById("chkShowPip")?.checked !== false;
+
+  const nameA = el.playerAName?.value || "A";
+  const nameB = el.playerBName?.value || "B";
 
   const povKey = `${pov}_${showPip ? 1 : 0}`;
   if (povKey !== lastUiPov) {
@@ -390,26 +631,28 @@ function updateDirectorViewportUI(t) {
       el.viewportA.classList.add("active-pov");
       el.viewportB.classList.add("pip-mate");
       el.liveDirectorBadge.textContent = showPip
-        ? `🟦 MATTHEW MAIN + LEELAI PIP`
-        : `🟦 MATTHEW POV`;
+        ? `🟦 ${nameA} + PiP`
+        : `🟦 ${nameA}`;
     } else if (pov === "B") {
       el.viewportB.classList.add("active-pov");
       el.viewportA.classList.add("pip-mate");
       el.liveDirectorBadge.textContent = showPip
-        ? `🟪 LEELAI MAIN + MATTHEW PIP`
-        : `🟪 LEELAI POV`;
+        ? `🟪 ${nameB} + PiP`
+        : `🟪 ${nameB}`;
     } else {
       el.monitorsContainer.classList.add("split-mode");
-      el.liveDirectorBadge.textContent = "🔥 50/50 CO-OP SPLIT (MATTHEW + LEELAI)";
+      el.liveDirectorBadge.textContent = `⚡ 50/50 Split`;
     }
 
-    // Update Live Broadcast Camera Switcher Deck tally lights
     document.getElementById("btnSwitchPovA")?.classList.toggle("tally-active", pov === "A");
     document.getElementById("btnSwitchPovSplit")?.classList.toggle("tally-active", pov === "SPLIT");
     document.getElementById("btnSwitchPovB")?.classList.toggle("tally-active", pov === "B");
   }
 
-  updateLudwigHudAtTime(t);
+  // Update comment time badge
+  const cmtBadge = document.getElementById("commentTimeBadge");
+  if (cmtBadge) cmtBadge.textContent = `@ ${formatTime(t)}`;
+
   updateFrameioScrubberPosition(t);
 
   if (info && info.highlight) {
@@ -420,7 +663,7 @@ function updateDirectorViewportUI(t) {
       const num = hl.scene_number || info.highlightIndex + 1;
       el.activeSceneBadge.textContent = activeInfo ? `SCENE ${num} / ${totalScenes}` : `SCENE ${num}`;
       el.activeSceneTitle.textContent = hl.title;
-      el.activeSceneAct.textContent = hl.act || "Story Scene";
+      el.activeSceneAct.textContent = hl.act || "";
       const dur = (hl.end_sec - hl.start_sec).toFixed(1);
       el.activeSceneRangeLabel.textContent = `${dur}s`;
 
@@ -440,7 +683,7 @@ function updateDirectorViewportUI(t) {
 }
 
 // =========================================================================
-// ZERO-LAG PLAYBACK SYNC ENGINE & 4-STEM SEPARATED WEB AUDIO MIXER
+// ZERO-LAG PLAYBACK SYNC ENGINE & 4-STEM AUDIO MIXER
 // =========================================================================
 let audioCtx = null;
 let mattGainNode = null;
@@ -456,7 +699,7 @@ let voiceMixerInitialized = false;
 let volMattPct = 100;
 let volLeePct = 145;
 let volDeskMattPct = 80;
-let volDeskLeePct = 0; // Muted at 0% by default so Leelai's desktop Discord echo is 100% eliminated!
+let volDeskLeePct = 0;
 let mattVoiceMuted = false;
 let leeVoiceMuted = false;
 let mattDeskMuted = false;
@@ -474,22 +717,19 @@ let lastHardSeekMsAudio = 0;
 let lastRateNudgeMsA = 0;
 let lastRateNudgeMsB = 0;
 
-// User-Adjustable Video Playback & Quality Tuner State
 let currentVideoQuality = localStorage.getItem("dualsync_video_quality") || "540p";
-let syncEngineMode = localStorage.getItem("dualsync_sync_engine") || "free_run"; // "free_run" | "single_decoder" | "gentle_lock"
+let syncEngineMode = localStorage.getItem("dualsync_sync_engine") || "free_run";
 let driftToleranceSec = parseFloat(localStorage.getItem("dualsync_drift_tol") || "0.55");
 let userPlaybackSpeed = 1.0;
-let streamSourceMode = localStorage.getItem("dualsync_stream_source") || "auto"; // "auto" | "local" | "tunnel" | "cloud"
-let resolvedBackendBaseUrl = ""; // "" (same-origin), "http://127.0.0.1:8765", tunnel URL, or "CLOUD"
+let streamSourceMode = localStorage.getItem("dualsync_stream_source") || "auto";
+let resolvedBackendBaseUrl = "";
 
-// Cached WebAudio gains to avoid 60fps AudioParam automation queue spam
 let lastGainM = -1;
 let lastGainL = -1;
 let lastGainDM = -1;
 let lastGainDL = -1;
 let lastMixerStateSignature = "";
 
-// FPS & Telemetry state
 let fpsFrameCount = 0;
 let fpsLastSampleMs = performance.now();
 let measuredFps = 60;
@@ -510,7 +750,6 @@ function initWebAudioVoiceMixer() {
     if (!AudioContextClass) return;
     audioCtx = new AudioContextClass();
 
-    // 1. masterAudio (/api/stream/VOICES): Left = Matthew Isolated Mic (A2), Right = Leelai Studio Mic (B1)
     const voiceSource = audioCtx.createMediaElementSource(ma);
     const voiceSplitter = audioCtx.createChannelSplitter(2);
     mattGainNode = audioCtx.createGain();
@@ -522,7 +761,6 @@ function initWebAudioVoiceMixer() {
     mattTimeData = new Uint8Array(mattAnalyser.fftSize);
     leeTimeData = new Uint8Array(leeAnalyser.fftSize);
 
-    // 2. desktopAudio (/api/stream/DESKTOPS): Left = Matthew Desktop (A1), Right = Leelai Desktop (B0)
     mattDeskGainNode = audioCtx.createGain();
     leeDeskGainNode = audioCtx.createGain();
 
@@ -535,7 +773,6 @@ function initWebAudioVoiceMixer() {
     mattGainNode.connect(mattAnalyser);
     leeGainNode.connect(leeAnalyser);
 
-    // Center both isolated microphones in Left (0) and Right (1)
     mattGainNode.connect(merger, 0, 0);
     mattGainNode.connect(merger, 0, 1);
     leeGainNode.connect(merger, 0, 0);
@@ -567,7 +804,7 @@ function determineActiveAudioOwnerAtTime(t) {
   const activeInfo = getActiveCutAtTime(t);
   const pov = activeInfo ? activeInfo.cut.active_pov : "A";
 
-  let sp = 0; // 0 = silent, 1 = Matthew talking, 2 = Leelai talking
+  let sp = 0;
   if (voiceEnvelopes && voiceEnvelopes.bin_sec > 0) {
     const idx = Math.min(voiceEnvelopes.count - 1, Math.max(0, Math.floor(t / voiceEnvelopes.bin_sec)));
     if (voiceEnvelopes.speaker) {
@@ -635,8 +872,8 @@ function applyVoiceMixerGains(t = masterTime) {
   const lblL = document.getElementById("labelVolLee");
   const lblDM = document.getElementById("labelVolDeskMatt");
   const lblDL = document.getElementById("labelVolDeskLee");
-  if (lblM) lblM.textContent = mattVoiceMuted ? "MUTE" : autoMuteMatt ? "AUTO-MUTE" : `${volMattPct}%`;
-  if (lblL) lblL.textContent = leeVoiceMuted ? "MUTE" : autoMuteLee ? "AUTO-MUTE" : `${volLeePct}%`;
+  if (lblM) lblM.textContent = mattVoiceMuted ? "MUTE" : autoMuteMatt ? "AUTO" : `${volMattPct}%`;
+  if (lblL) lblL.textContent = leeVoiceMuted ? "MUTE" : autoMuteLee ? "AUTO" : `${volLeePct}%`;
   if (lblDM) lblDM.textContent = mattDeskMuted ? "MUTE" : `${volDeskMattPct}%`;
   if (lblDL) lblDL.textContent = leeDeskMuted ? "MUTE" : `${volDeskLeePct}%`;
 
@@ -655,26 +892,15 @@ function applyVoiceMixerGains(t = masterTime) {
   const badge = document.getElementById("autoMuteStatusBadge");
   if (badge) {
     if (autoMuteMode === "separated_4stem") {
-      badge.textContent = `✨ 4-STEMS (Leelai Mic ${volLeePct}% · Lee Desk ${leeDeskMuted ? "0%" : volDeskLeePct + "%"})`;
+      badge.textContent = "4-STEM MIX";
     } else if (owner === "B") {
-      badge.textContent = "🔊 LIVE: LEELAI (Matthew Auto-Muted)";
+      badge.textContent = "LIVE: B";
     } else if (owner === "A") {
-      badge.textContent = "🔊 LIVE: MATTHEW (Leelai Auto-Muted)";
+      badge.textContent = "LIVE: A";
     } else {
-      badge.textContent = "🎚️ MANUAL 4-TRACK MIX";
+      badge.textContent = "MANUAL";
     }
   }
-}
-
-function computeAnalyserRms(analyser, buf) {
-  if (!analyser || !buf) return 0;
-  analyser.getByteTimeDomainData(buf);
-  let sumSq = 0;
-  for (let i = 0; i < buf.length; i++) {
-    const v = (buf[i] - 128) / 128.0;
-    sumSq += v * v;
-  }
-  return Math.sqrt(sumSq / buf.length);
 }
 
 function updateVoiceVuMeters(t) {
@@ -738,7 +964,6 @@ function syncSingleVideoElement(videoEl, targetSec, clipDurSec, forceSeek, slot)
       if (slot === "A") lastHardSeekMsA = nowMs;
       else lastHardSeekMsB = nowMs;
     } else if (syncEngineMode === "gentle_lock") {
-      // Only nudge playbackRate at most once every 1000ms to prevent Chromium frame drops
       const lastNudge = slot === "A" ? lastRateNudgeMsA : lastRateNudgeMsB;
       if (nowMs - lastNudge > 1000) {
         if (slot === "A") lastRateNudgeMsA = nowMs;
@@ -752,7 +977,6 @@ function syncSingleVideoElement(videoEl, targetSec, clipDurSec, forceSeek, slot)
         }
       }
     } else {
-      // "free_run" or "single_decoder": keep hardware decoder at pure constant baseRate — zero stutter!
       if (Math.abs(videoEl.playbackRate - baseRate) > 0.01) {
         videoEl.playbackRate = baseRate;
       }
@@ -779,7 +1003,7 @@ function updatePlaybackTelemetry(timeA, timeB) {
   const driftEl = document.getElementById("telemetryDriftBadge");
   const bufEl = document.getElementById("telemetryBufferBadge");
   if (fpsEl) {
-    fpsEl.textContent = isPlaying ? `${measuredFps} FPS` : "60 FPS (Idle)";
+    fpsEl.textContent = isPlaying ? `${measuredFps} FPS` : "Idle";
     fpsEl.classList.toggle("telem-ok", !isPlaying || measuredFps >= 26);
     fpsEl.classList.toggle("telem-warn", isPlaying && measuredFps < 26);
   }
@@ -801,7 +1025,7 @@ function updatePlaybackTelemetry(timeA, timeB) {
         }
       }
     } catch (_) {}
-    bufEl.textContent = `Buffer: ${ahead.toFixed(1)}s`;
+    bufEl.textContent = `Buf: ${ahead.toFixed(1)}s`;
   }
 }
 
@@ -815,7 +1039,7 @@ function syncVideosToMasterTime(t, forceSeek = false) {
 
   el.masterTimecode.textContent = formatMasterTimecode(masterTime);
   el.localTcA.textContent = formatTime(timeA);
-  el.localTcB.textContent = timeB >= 0 ? formatTime(timeB) : `WAIT (${timeB.toFixed(1)}s)`;
+  el.localTcB.textContent = timeB >= 0 ? formatTime(timeB) : `WAIT`;
 
   const activeInfo = getActiveCutAtTime(masterTime);
   const activePov = activeInfo ? activeInfo.cut.active_pov : "A";
@@ -902,9 +1126,6 @@ function tickPlayback() {
     masterTime += (1 / 60) * (userPlaybackSpeed || 1.0);
   }
 
-  // Handle "Play Edited Story Reel Only" preview mode:
-  // Only jump to the next scene when playback naturally reaches the end of the scene it was playing in!
-  // Never teleport forward if the user manually clicked in a lead-in/lead-out area.
   if (el.chkPlayHighlightsOnly.checked && projectState?.highlights?.length) {
     const enabled = projectState.highlights.filter((h) => h.enabled);
     if (enabled.length > 0) {
@@ -994,9 +1215,10 @@ function togglePlayback() {
   else startPlayback();
 }
 
-// TRIM / EXTEND SCENE HELPER ("make sections longer I think need it")
+// TRIM / EXTEND SCENE HELPER
 async function trimHighlightById(hlId, deltaStartSec, deltaEndSec) {
   if (!projectState || !projectState.highlights) return;
+  pushUndoState("trim");
   const maxDur = getMasterDuration();
   const hl = projectState.highlights.find((h) => h.id === hlId);
   if (!hl) return;
@@ -1027,7 +1249,7 @@ async function trimActiveOrNearestScene(deltaStartSec, deltaEndSec) {
   await trimHighlightById(info.highlight.id, deltaStartSec, deltaEndSec);
 }
 
-// RENDER HIGHLIGHTS SIDEBAR GROUPED BY STORY ACT
+// RENDER HIGHLIGHTS SIDEBAR
 function renderHighlightsList() {
   const highlights = projectState?.highlights || [];
   if (highlights.length === 0) {
@@ -1054,17 +1276,20 @@ function renderHighlightsList() {
     card.className = `highlight-card ${hl.enabled ? "" : "disabled-card"}`;
     card.setAttribute("data-hl-card", String(hlIdx));
 
+    const nameA = el.playerAName?.value || "A";
+    const nameB = el.playerBName?.value || "B";
+
     const cutsHtml = (hl.camera_cuts || [])
       .map(
         (c, cIdx) =>
-          `<span class="cut-chip pov-${c.active_pov}" data-hl="${hlIdx}" data-cut="${cIdx}" title="${c.reason || ""} (Click to jump &amp; switch POV)">
-            POV ${c.active_pov}: ${formatTime(c.start_sec)}–${formatTime(c.end_sec)}
+          `<span class="cut-chip pov-${c.active_pov}" data-hl="${hlIdx}" data-cut="${cIdx}" title="${c.reason || ""} (Click to switch POV)">
+            ${c.active_pov === "SPLIT" ? "⚡" : c.active_pov === "A" ? "🟦" : "🟪"} ${formatTime(c.start_sec)}–${formatTime(c.end_sec)}
           </span>`
       )
       .join("");
 
     const thumbHtml = hl.thumbnail_url
-      ? `<img class="hl-thumb" src="${hl.thumbnail_url}" alt="Scene ${hl.scene_number}" data-seek="${hl.start_sec}" title="Click to jump to Scene ${hl.scene_number}" />`
+      ? `<img class="hl-thumb" src="${hl.thumbnail_url}" alt="Scene ${hl.scene_number}" data-seek="${hl.start_sec}" title="Click to jump" />`
       : "";
 
     const durSec = (hl.end_sec - hl.start_sec).toFixed(1);
@@ -1093,12 +1318,12 @@ function renderHighlightsList() {
       <div class="hl-reason">${hl.reasoning || ""}</div>
       <div class="hl-cuts-strip">${cutsHtml}</div>
       <div class="hl-card-trim-row">
-        <span>Adjust Length:</span>
+        <span>Adjust:</span>
         <div class="card-trim-btns">
-          <button class="btn btn-xs btn-outline" data-trim-id="${hl.id}" data-ds="-3" data-de="0" title="Start 3s earlier">⏪ +3s Start</button>
-          <button class="btn btn-xs btn-outline" data-trim-id="${hl.id}" data-ds="0" data-de="-2" title="Trim 2s off end">-2s End</button>
-          <button class="btn btn-xs btn-secondary" data-trim-id="${hl.id}" data-ds="0" data-de="5" title="Extend end by 5 seconds">+5s Longer</button>
-          <button class="btn btn-xs btn-secondary" data-trim-id="${hl.id}" data-ds="0" data-de="10" title="Extend end by 10 seconds">+10s Longer</button>
+          <button class="btn btn-xs btn-outline" data-trim-id="${hl.id}" data-ds="-3" data-de="0">⏪ +3s</button>
+          <button class="btn btn-xs btn-outline" data-trim-id="${hl.id}" data-ds="0" data-de="-2">-2s</button>
+          <button class="btn btn-xs btn-secondary" data-trim-id="${hl.id}" data-ds="0" data-de="5">+5s</button>
+          <button class="btn btn-xs btn-secondary" data-trim-id="${hl.id}" data-ds="0" data-de="10">+10s</button>
         </div>
       </div>
     `;
@@ -1117,6 +1342,7 @@ function renderHighlightsList() {
 
   el.highlightsList.querySelectorAll(".hl-enable-chk").forEach((chk) => {
     chk.addEventListener("change", async () => {
+      pushUndoState("toggle scene");
       const idx = parseInt(chk.getAttribute("data-hl"), 10);
       projectState.highlights[idx].enabled = chk.checked;
       await saveHighlightsToServer();
@@ -1125,6 +1351,7 @@ function renderHighlightsList() {
 
   el.highlightsList.querySelectorAll(".hl-del-btn").forEach((btn) => {
     btn.addEventListener("click", async () => {
+      pushUndoState("delete scene");
       const idx = parseInt(btn.getAttribute("data-hl"), 10);
       projectState.highlights.splice(idx, 1);
       await saveHighlightsToServer();
@@ -1133,6 +1360,7 @@ function renderHighlightsList() {
 
   el.highlightsList.querySelectorAll(".cut-chip").forEach((chip) => {
     chip.addEventListener("click", async () => {
+      pushUndoState("switch POV");
       const hlIdx = parseInt(chip.getAttribute("data-hl"), 10);
       const cutIdx = parseInt(chip.getAttribute("data-cut"), 10);
       const cut = projectState.highlights[hlIdx].camera_cuts[cutIdx];
@@ -1157,7 +1385,9 @@ const IS_STATIC_CLOUD =
   window.location.hostname.endsWith(".github.io") ||
   window.location.protocol === "file:";
 
-async function saveHighlightsToServer() {
+async function saveHighlightsToServer(skipUndo = false) {
+  setSaveStatus("saving");
+
   try {
     if (projectState?.highlights) {
       localStorage.setItem(
@@ -1169,6 +1399,7 @@ async function saveHighlightsToServer() {
 
   if (IS_STATIC_CLOUD) {
     renderState(projectState, false);
+    setSaveStatus("saved");
     return;
   }
 
@@ -1185,15 +1416,22 @@ async function saveHighlightsToServer() {
         updated.sync = localSyncBackup;
       }
       renderState(updated, false);
+      setSaveStatus("saved");
     } else {
       renderState(projectState, false);
+      setSaveStatus("unsaved");
     }
   } catch (_) {
     renderState(projectState, false);
+    setSaveStatus("unsaved");
   }
+
+  // Also auto-save to multi-project system
+  autoSaveToProject();
 }
 
-// TIMELINE RENDERING (FOCUSED SCENE DRAG-TRIM MODE + FULL 2H OVERVIEW MODE)
+
+// TIMELINE RENDERING
 function getLaneWidthPx() {
   const baseWidth = Math.max(600, el.timelineScrollWrap.clientWidth - LABEL_WIDTH - 10);
   if (timelineMode === "scene") {
@@ -1271,6 +1509,7 @@ function startSceneEdgeDrag(e, hl, edge) {
   e.preventDefault();
   e.stopPropagation();
   pausePlayback();
+  pushUndoState("drag trim");
   const totalDur = getMasterDuration();
   lockedTimelineWindow = getTimelineWindow();
   const { winStart, winDur } = lockedTimelineWindow;
@@ -1295,7 +1534,7 @@ function startSceneEdgeDrag(e, hl, edge) {
       const delta = clampedIn - origStart;
       const sign = delta >= 0 ? "+" : "";
       showTrimTooltip(
-        `⏪ IN: ${formatTime(clampedIn)} (${sign}${delta.toFixed(1)}s) • Scene Dur: ${(hl.end_sec - hl.start_sec).toFixed(1)}s`
+        `⏪ IN: ${formatTime(clampedIn)} (${sign}${delta.toFixed(1)}s) · ${(hl.end_sec - hl.start_sec).toFixed(1)}s`
       );
       syncVideosToMasterTime(clampedIn, true);
     } else {
@@ -1311,7 +1550,7 @@ function startSceneEdgeDrag(e, hl, edge) {
       const delta = clampedOut - origEnd;
       const sign = delta >= 0 ? "+" : "";
       showTrimTooltip(
-        `⏩ OUT: ${formatTime(clampedOut)} (${sign}${delta.toFixed(1)}s) • Scene Dur: ${(hl.end_sec - hl.start_sec).toFixed(1)}s`
+        `⏩ OUT: ${formatTime(clampedOut)} (${sign}${delta.toFixed(1)}s) · ${(hl.end_sec - hl.start_sec).toFixed(1)}s`
       );
       syncVideosToMasterTime(Math.max(hl.start_sec, clampedOut - 0.1), true);
     }
@@ -1334,6 +1573,7 @@ function startCutBoundaryDrag(e, hl, leftCut, rightCut) {
   e.preventDefault();
   e.stopPropagation();
   pausePlayback();
+  pushUndoState("drag cut boundary");
   lockedTimelineWindow = getTimelineWindow();
   const { winStart, winDur } = lockedTimelineWindow;
 
@@ -1349,7 +1589,7 @@ function startCutBoundaryDrag(e, hl, leftCut, rightCut) {
     leftCut.end_sec = clamped;
     rightCut.start_sec = clamped;
     showTrimTooltip(
-      `✂️ Cut Switch (${leftCut.active_pov} → ${rightCut.active_pov}) @ ${formatTime(clamped)}`
+      `✂️ Cut Switch @ ${formatTime(clamped)}`
     );
     syncVideosToMasterTime(clamped, true);
     renderTimeline();
@@ -1379,7 +1619,7 @@ function renderTimeline() {
     rowLbl.textContent =
       timelineMode === "scene" && activeHl
         ? `✂️ Scene ${activeHl.scene_number}`
-        : `🎬 21 Scenes`;
+        : `🎬 Scenes`;
   }
 
   // 1. Draw Ruler
@@ -1401,42 +1641,41 @@ function renderTimeline() {
     rCtx.fillText(label, x + 3, 11);
   }
 
-  // 2. Render Director Cuts Lane
+  // 2. Director Cuts Lane
   el.directorTrackLane.innerHTML = "";
+
+  const nameA = el.playerAName?.value || "A";
+  const nameB = el.playerBName?.value || "B";
 
   if (timelineMode === "scene" && activeHl) {
     const sceneLeftPx = Math.max(0, ((activeHl.start_sec - winStart) / winDur) * laneW);
     const sceneRightPx = Math.min(laneW, ((activeHl.end_sec - winStart) / winDur) * laneW);
     const sceneWidthPx = Math.max(24, sceneRightPx - sceneLeftPx);
 
-    // Dimmed left lead-in context zone
     if (sceneLeftPx > 8) {
       const dimL = document.createElement("div");
       dimL.className = "tl-context-dim";
       dimL.style.left = "0px";
       dimL.style.width = `${sceneLeftPx}px`;
-      dimL.textContent = sceneLeftPx > 95 ? "⏪ Drag IN Left to Start Earlier" : "";
+      dimL.textContent = sceneLeftPx > 95 ? "⏪ Drag IN" : "";
       el.directorTrackLane.appendChild(dimL);
     }
 
-    // Dimmed right lead-out context zone
     if (laneW - sceneRightPx > 8) {
       const dimR = document.createElement("div");
       dimR.className = "tl-context-dim";
       dimR.style.left = `${sceneRightPx}px`;
       dimR.style.width = `${laneW - sceneRightPx}px`;
-      dimR.textContent = laneW - sceneRightPx > 110 ? "Drag OUT Right to Make Longer ⏩" : "";
+      dimR.textContent = laneW - sceneRightPx > 110 ? "Drag OUT ⏩" : "";
       el.directorTrackLane.appendChild(dimR);
     }
 
-    // Active Scene Golden Bracket Frame
     const bracket = document.createElement("div");
     bracket.className = "focused-scene-bracket";
     bracket.style.left = `${sceneLeftPx}px`;
     bracket.style.width = `${sceneWidthPx}px`;
     el.directorTrackLane.appendChild(bracket);
 
-    // Render Camera Cuts inside the Active Scene
     const cuts =
       activeHl.camera_cuts && activeHl.camera_cuts.length > 0
         ? activeHl.camera_cuts
@@ -1453,14 +1692,14 @@ function renderTimeline() {
       const cutDur = (cut.end_sec - cut.start_sec).toFixed(1);
       const povLabel =
         cut.active_pov === "A"
-          ? "🟦 Matt + PiP"
+          ? `🟦 ${nameA}`
           : cut.active_pov === "B"
-          ? "🟪 Leelai + PiP"
-          : "⚡ 50/50 Split";
-      block.title = `${povLabel} (${formatTime(cut.start_sec)} – ${formatTime(cut.end_sec)}, ${cutDur}s)\nClick to jump • Click badge to switch POV`;
+          ? `🟪 ${nameB}`
+          : "⚡ Split";
+      block.title = `${povLabel} (${formatTime(cut.start_sec)} – ${formatTime(cut.end_sec)}, ${cutDur}s)`;
       block.innerHTML = `
         <span>${cWidth > 95 ? povLabel : cut.active_pov} (${cutDur}s)</span>
-        ${cWidth > 70 ? `<span class="cut-pov-pill" title="Click to switch POV">🎥</span>` : ""}
+        ${cWidth > 70 ? `<span class="cut-pov-pill" title="Switch POV">🎥</span>` : ""}
       `;
 
       const pill = block.querySelector(".cut-pov-pill");
@@ -1468,6 +1707,7 @@ function renderTimeline() {
         pill.addEventListener("mousedown", (e) => e.stopPropagation());
         pill.addEventListener("click", async (e) => {
           e.stopPropagation();
+          pushUndoState("switch POV");
           const order = ["A", "SPLIT", "B"];
           cut.active_pov = order[(order.indexOf(cut.active_pov) + 1) % order.length];
           await saveHighlightsToServer();
@@ -1476,38 +1716,34 @@ function renderTimeline() {
 
       el.directorTrackLane.appendChild(block);
 
-      // Draggable Boundary Handle between cut[cIdx] and cut[cIdx + 1]
       if (cIdx < cuts.length - 1) {
         const nextCut = cuts[cIdx + 1];
         const bHandle = document.createElement("div");
         bHandle.className = "cut-boundary-handle";
         bHandle.style.left = `${((cut.end_sec - winStart) / winDur) * laneW}px`;
-        bHandle.title = "Drag left or right to move camera switch point";
+        bHandle.title = "Drag to move cut point";
         bHandle.textContent = "⋮";
         bHandle.addEventListener("mousedown", (e) => startCutBoundaryDrag(e, activeHl, cut, nextCut));
         el.directorTrackLane.appendChild(bHandle);
       }
     });
 
-    // Left Draggable IN Handle (⟦)
     const handleIn = document.createElement("div");
     handleIn.className = "scene-trim-handle handle-in";
     handleIn.style.left = `${Math.max(0, sceneLeftPx - 14)}px`;
-    handleIn.title = `Drag Left/Right to Trim Scene Start (${formatTime(activeHl.start_sec)})`;
+    handleIn.title = `Drag to trim IN (${formatTime(activeHl.start_sec)})`;
     handleIn.textContent = "⟦";
     handleIn.addEventListener("mousedown", (e) => startSceneEdgeDrag(e, activeHl, "in"));
     el.directorTrackLane.appendChild(handleIn);
 
-    // Right Draggable OUT Handle (⟧)
     const handleOut = document.createElement("div");
     handleOut.className = "scene-trim-handle handle-out";
     handleOut.style.left = `${Math.min(laneW - 16, sceneRightPx - 2)}px`;
-    handleOut.title = `Drag Left/Right to Trim Scene End (${formatTime(activeHl.end_sec)})`;
+    handleOut.title = `Drag to trim OUT (${formatTime(activeHl.end_sec)})`;
     handleOut.textContent = "⟧";
     handleOut.addEventListener("mousedown", (e) => startSceneEdgeDrag(e, activeHl, "out"));
     el.directorTrackLane.appendChild(handleOut);
   } else {
-    // Full 2-Hour Overview Mode
     (projectState?.highlights || []).forEach((hl) => {
       if (!hl.enabled) return;
       (hl.camera_cuts || []).forEach((cut) => {
@@ -1517,56 +1753,22 @@ function renderTimeline() {
         block.className = `director-cut-block pov-${cut.active_pov}`;
         block.style.left = `${leftPx}px`;
         block.style.width = `${widthPx}px`;
-        block.title = `[${hl.act}] Scene ${hl.scene_number}: ${hl.title}\nPOV ${cut.active_pov} (${formatTime(cut.start_sec)}–${formatTime(cut.end_sec)})\nClick to jump & zoom into scene`;
-        block.innerHTML = `<span>S${hl.scene_number}•${cut.active_pov}</span>`;
-
+        block.title = `Scene ${hl.scene_number}: ${hl.title}\nPOV ${cut.active_pov}`;
+        block.innerHTML = `<span>S${hl.scene_number}·${cut.active_pov}</span>`;
         block.addEventListener("click", (e) => {
           e.stopPropagation();
           syncVideosToMasterTime(cut.start_sec + 0.05, true);
         });
-
         el.directorTrackLane.appendChild(block);
       });
     });
   }
 
-  // 3. Draw all 4 separated OBS audio track waveforms (Word-level 5Hz in Focused Scene mode, 1800-pt in Full mode!)
-  drawWindowedWaveform(
-    el.waveformCanvasA,
-    laneW,
-    win,
-    voiceEnvelopes?.matthew,
-    allWaveforms?.matt_mic_a2 || projectState?.sync?.waveform_a || [],
-    "#38bdf8",
-    "rgba(56, 189, 248, 0.14)"
-  );
-  drawWindowedWaveform(
-    el.waveformCanvasB,
-    laneW,
-    win,
-    voiceEnvelopes?.leelai,
-    allWaveforms?.lee_mic_b1 || projectState?.sync?.waveform_b || [],
-    "#c084fc",
-    "rgba(192, 132, 252, 0.14)"
-  );
-  drawWindowedWaveform(
-    document.getElementById("waveformCanvasDeskA"),
-    laneW,
-    win,
-    voiceEnvelopes?.matt_desk,
-    allWaveforms?.matt_desk_a1 || [],
-    "#34d399",
-    "rgba(52, 211, 153, 0.10)"
-  );
-  drawWindowedWaveform(
-    document.getElementById("waveformCanvasDeskB"),
-    laneW,
-    win,
-    voiceEnvelopes?.lee_desk,
-    allWaveforms?.lee_desk_b0 || [],
-    "#fbbf24",
-    "rgba(251, 191, 36, 0.08)"
-  );
+  // 3. Waveforms
+  drawWindowedWaveform(el.waveformCanvasA, laneW, win, voiceEnvelopes?.matthew, allWaveforms?.matt_mic_a2 || projectState?.sync?.waveform_a || [], "#38bdf8", "rgba(56, 189, 248, 0.14)");
+  drawWindowedWaveform(el.waveformCanvasB, laneW, win, voiceEnvelopes?.leelai, allWaveforms?.lee_mic_b1 || projectState?.sync?.waveform_b || [], "#c084fc", "rgba(192, 132, 252, 0.14)");
+  drawWindowedWaveform(document.getElementById("waveformCanvasDeskA"), laneW, win, voiceEnvelopes?.matt_desk, allWaveforms?.matt_desk_a1 || [], "#34d399", "rgba(52, 211, 153, 0.10)");
+  drawWindowedWaveform(document.getElementById("waveformCanvasDeskB"), laneW, win, voiceEnvelopes?.lee_desk, allWaveforms?.lee_desk_b0 || [], "#fbbf24", "rgba(251, 191, 36, 0.08)");
 
   updatePlayheadPosition();
 }
@@ -1584,7 +1786,6 @@ function drawWindowedWaveform(canvas, laneW, win, envSamples5Hz, overviewSamples
   ctx.fillStyle = bgColor;
   ctx.fillRect(0, 1, laneW, h - 2);
 
-  // Pick 5Hz (0.2s) high-res samples in Focused Scene mode, or 1800-pt overview in Full mode
   let slice = [];
   if (timelineMode === "scene" && envSamples5Hz && voiceEnvelopes?.bin_sec > 0) {
     const binSec = voiceEnvelopes.bin_sec;
@@ -1610,7 +1811,6 @@ function drawWindowedWaveform(canvas, laneW, win, envSamples5Hz, overviewSamples
     }
   }
 
-  // Dim outside active scene boundaries in Focused Scene mode so speech in/out points pop visually
   if (timelineMode === "scene" && activeHl) {
     const sceneLeftPx = Math.max(0, ((activeHl.start_sec - winStart) / winDur) * laneW);
     const sceneRightPx = Math.min(laneW, ((activeHl.end_sec - winStart) / winDur) * laneW);
@@ -1629,7 +1829,7 @@ function drawWindowedWaveform(canvas, laneW, win, envSamples5Hz, overviewSamples
   }
 }
 
-// TIMELINE SCRUBBING (1:1 Mouse-to-Playhead Lock + Click-and-Drag Scrubbing)
+// TIMELINE SCRUBBING
 function seekTimelineAtClientX(clientX, win) {
   const rect = getTrackLaneRect();
   const effW = Math.max(1, rect.width);
@@ -1676,10 +1876,11 @@ function startTimelineScrub(e) {
   });
 });
 
-// CUTTING & POV SWITCHING ACTIONS AT PLAYHEAD
+// CUTTING & POV SWITCHING
 async function splitCutAtPlayhead() {
   const active = getActiveCutAtTime(masterTime);
   if (!active) return;
+  pushUndoState("split cut");
   const { highlight, cut } = active;
   if (masterTime <= cut.start_sec + 0.25 || masterTime >= cut.end_sec - 0.25) return;
 
@@ -1690,7 +1891,7 @@ async function splitCutAtPlayhead() {
     start_sec: splitPoint,
     end_sec: cut.end_sec,
     active_pov: nextPov,
-    reason: `Manual split switch to POV ${nextPov}`,
+    reason: `Split to ${nextPov}`,
   };
   cut.end_sec = splitPoint;
   const idx = highlight.camera_cuts.indexOf(cut);
@@ -1701,19 +1902,19 @@ async function splitCutAtPlayhead() {
 async function cyclePovAtPlayhead() {
   const active = getActiveCutAtTime(masterTime);
   if (!active) return;
+  pushUndoState("cycle POV");
   const order = ["A", "B", "SPLIT"];
   active.cut.active_pov = order[(order.indexOf(active.cut.active_pov) + 1) % order.length];
   await saveHighlightsToServer();
 }
 
-// LIVE BROADCAST CAMERA SWITCHER DECK (Keys 1 = Matt+PiP, 2 = 50/50 Split, 3 = Leelai+PiP)
 async function punchOrSwitchPov(targetPov) {
   const active = getActiveCutAtTime(masterTime);
   if (!active) return;
+  pushUndoState("punch cut");
   const { highlight, cut } = active;
   const livePunch = document.getElementById("chkLivePunchCut")?.checked !== false;
 
-  // If Live Punch-In is enabled and playhead is at least 0.8s into the cut, split and switch!
   if (
     livePunch &&
     cut.active_pov !== targetPov &&
@@ -1726,7 +1927,7 @@ async function punchOrSwitchPov(targetPov) {
       start_sec: splitPoint,
       end_sec: cut.end_sec,
       active_pov: targetPov,
-      reason: `Live switcher punch-in to ${targetPov}`,
+      reason: `Punch to ${targetPov}`,
     };
     cut.end_sec = splitPoint;
     const idx = highlight.camera_cuts.indexOf(cut);
@@ -1741,6 +1942,7 @@ async function punchOrSwitchPov(targetPov) {
 async function deleteOrMergeCurrentCut() {
   const active = getActiveCutAtTime(masterTime);
   if (!active) return;
+  pushUndoState("merge cut");
   const { highlight, cut } = active;
   const cuts = highlight.camera_cuts || [];
   if (cuts.length <= 1) return;
@@ -1757,6 +1959,7 @@ async function deleteOrMergeCurrentCut() {
 
 async function addHighlightAtPlayhead() {
   if (!projectState?.track_a) return;
+  pushUndoState("add scene");
   const totalDur = getMasterDuration();
   const startS = Number(Math.max(0, masterTime - 1.0).toFixed(2));
   const endS = Number(Math.min(totalDur, startS + 15.0).toFixed(2));
@@ -1766,17 +1969,17 @@ async function addHighlightAtPlayhead() {
     id: `hl_${Math.random().toString(36).slice(2, 9)}`,
     scene_number: projectState.highlights.length + 1,
     act: "Custom Scene",
-    title: `Custom Highlight @ ${formatTime(startS)}`,
+    title: `Scene @ ${formatTime(startS)}`,
     category: "action",
     start_sec: startS,
     end_sec: endS,
     local_offset_sec: getEffectiveOffsetAtTime(startS),
     excitement_score: 90,
-    reasoning: "Added manually by editor at playhead",
+    reasoning: "Added manually at playhead",
     enabled: true,
     camera_cuts: [
-      { id: `cut_${Date.now()}a`, start_sec: startS, end_sec: midS, active_pov: "A", reason: "POV A Lead" },
-      { id: `cut_${Date.now()}b`, start_sec: midS, end_sec: endS, active_pov: "B", reason: "POV B Switch" },
+      { id: `cut_${Date.now()}a`, start_sec: startS, end_sec: midS, active_pov: "A", reason: "POV A" },
+      { id: `cut_${Date.now()}b`, start_sec: midS, end_sec: endS, active_pov: "B", reason: "POV B" },
     ],
   });
   await saveHighlightsToServer();
@@ -1796,9 +1999,89 @@ function getAllCutBoundaries() {
   return Array.from(pts).sort((a, b) => a - b);
 }
 
+// =========================================================================
+// SAVE SNAPSHOTS
+// =========================================================================
+async function saveSnapshot() {
+  const name = prompt("Snapshot name:", `Save ${new Date().toLocaleString()}`);
+  if (!name) return;
+
+  const snapshot = {
+    id: `snap_${Date.now()}`,
+    name,
+    created_at: new Date().toISOString(),
+    highlights: deepCloneHighlights(),
+  };
+
+  // Save to localStorage
+  let snapshots = [];
+  try {
+    snapshots = JSON.parse(localStorage.getItem("dualsync_snapshots") || "[]");
+  } catch (_) {}
+  snapshots.unshift(snapshot);
+  if (snapshots.length > 20) snapshots = snapshots.slice(0, 20);
+  localStorage.setItem("dualsync_snapshots", JSON.stringify(snapshots));
+
+  // Also save to server if available
+  if (!IS_STATIC_CLOUD) {
+    try {
+      await fetch("/api/snapshots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(snapshot),
+      });
+    } catch (_) {}
+  }
+
+  renderSnapshotsList();
+  showStatus(`Snapshot "${name}" saved!`);
+  setTimeout(hideStatus, 2000);
+}
+
+function loadSnapshot(snapshot) {
+  if (!confirm(`Load snapshot "${snapshot.name}"? Current edits will be replaced.`)) return;
+  pushUndoState("before load snapshot");
+  projectState.highlights = snapshot.highlights;
+  saveHighlightsToServer();
+}
+
+function renderSnapshotsList() {
+  const listEl = document.getElementById("snapshotsList");
+  if (!listEl) return;
+
+  let snapshots = [];
+  try {
+    snapshots = JSON.parse(localStorage.getItem("dualsync_snapshots") || "[]");
+  } catch (_) {}
+
+  if (snapshots.length === 0) {
+    listEl.innerHTML = '<div class="empty-state">No snapshots yet. Click 💾 Save to create one.</div>';
+    return;
+  }
+
+  listEl.innerHTML = "";
+  snapshots.forEach((snap) => {
+    const item = document.createElement("div");
+    item.className = "snapshot-item";
+    const timeStr = new Date(snap.created_at).toLocaleString();
+    item.innerHTML = `
+      <div>
+        <div class="snapshot-name">${snap.name}</div>
+        <div class="snapshot-time">${timeStr}</div>
+      </div>
+      <button class="btn btn-xs btn-outline">Load</button>
+    `;
+    item.querySelector("button").addEventListener("click", (e) => {
+      e.stopPropagation();
+      loadSnapshot(snap);
+    });
+    listEl.appendChild(item);
+  });
+}
+
 // API ACTIONS
 async function uploadFile(slot, file) {
-  showStatus(`Uploading & probing Track ${slot} (${file.name})...`);
+  showStatus(`Uploading Track ${slot} (${file.name})...`);
   try {
     const fd = new FormData();
     fd.append("file", file);
@@ -1806,7 +2089,7 @@ async function uploadFile(slot, file) {
     if (!resp.ok) throw new Error((await resp.json()).detail || "Upload failed");
     renderState(await resp.json(), true);
   } catch (err) {
-    alert(`Error loading Track ${slot}: ${err.message}`);
+    alert(`Error: ${err.message}`);
   } finally {
     hideStatus();
   }
@@ -1814,17 +2097,17 @@ async function uploadFile(slot, file) {
 
 async function loadFromPath(slot, pathStr) {
   if (!pathStr.trim()) return;
-  showStatus(`Probing local file for Track ${slot}...`);
+  showStatus(`Loading Track ${slot}...`);
   try {
     const resp = await fetch(`/api/load-path/${slot}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path: pathStr }),
     });
-    if (!resp.ok) throw new Error((await resp.json()).detail || "Failed to load path");
+    if (!resp.ok) throw new Error((await resp.json()).detail || "Failed");
     renderState(await resp.json(), true);
   } catch (err) {
-    alert(`Error loading path: ${err.message}`);
+    alert(`Error: ${err.message}`);
   } finally {
     hideStatus();
   }
@@ -1838,22 +2121,21 @@ el.btnLoadPathB.addEventListener("click", () => loadFromPath("B", el.pathInputB.
 
 el.btnLoadDemo.addEventListener("click", async () => {
   pausePlayback();
-  showStatus("Loading synthetic 30s Demo POV Clips...");
+  showStatus("Loading Demo Clips...");
   try {
     const resp = await fetch("/api/demo/load", { method: "POST" });
-    if (!resp.ok) throw new Error((await resp.json()).detail || "Failed to load demo");
-    const state = await resp.json();
-    renderState(state, true);
+    if (!resp.ok) throw new Error((await resp.json()).detail || "Failed");
+    renderState(await resp.json(), true);
     syncVideosToMasterTime(6.4, true);
   } catch (err) {
-    alert(`Demo load error: ${err.message}`);
+    alert(`Error: ${err.message}`);
   } finally {
     hideStatus();
   }
 });
 
 el.btnAutoSync.addEventListener("click", async () => {
-  showStatus("Extracting audio streams & running FFT + fine waveform cross-correlation...");
+  showStatus("Running audio cross-correlation...");
   try {
     const resp = await fetch("/api/sync/auto", {
       method: "POST",
@@ -1864,10 +2146,10 @@ el.btnAutoSync.addEventListener("click", async () => {
         max_search_offset_sec: 600.0,
       }),
     });
-    if (!resp.ok) throw new Error((await resp.json()).detail || "Auto-sync failed");
+    if (!resp.ok) throw new Error((await resp.json()).detail || "Failed");
     renderState(await resp.json(), false);
   } catch (err) {
-    alert(`Auto-Sync Error: ${err.message}`);
+    alert(`Sync Error: ${err.message}`);
   } finally {
     hideStatus();
   }
@@ -1886,7 +2168,7 @@ document.querySelectorAll("[data-nudge]").forEach((btn) => {
   });
 });
 
-// Human Judgment Trim Bar Buttons
+// Trim buttons
 el.btnStartEarlier5.addEventListener("click", () => trimActiveOrNearestScene(-5.0, 0.0));
 el.btnStartEarlier2.addEventListener("click", () => trimActiveOrNearestScene(-2.0, 0.0));
 el.btnStartLater2.addEventListener("click", () => trimActiveOrNearestScene(2.0, 0.0));
@@ -1895,16 +2177,18 @@ el.btnEndLonger3.addEventListener("click", () => trimActiveOrNearestScene(0.0, 3
 el.btnEndLonger5.addEventListener("click", () => trimActiveOrNearestScene(0.0, 5.0));
 el.btnEndLonger10.addEventListener("click", () => trimActiveOrNearestScene(0.0, 10.0));
 
+// Undo / Redo buttons
+document.getElementById("btnUndoAction")?.addEventListener("click", performUndo);
+document.getElementById("btnRedoAction")?.addEventListener("click", performRedo);
+document.getElementById("btnSaveSnapshot")?.addEventListener("click", saveSnapshot);
+
 el.btnAnalyzeGemini.addEventListener("click", async () => {
   const key = el.geminiApiKey.value.trim();
   if (key) localStorage.setItem("dualsync_gemini_api_key", key);
   const model = el.geminiModel.value;
+  pushUndoState("AI re-cut");
 
-  showStatus(
-    key
-      ? `Building synchronized dual-POV proxy & analyzing highlights with ${model} using your quota...`
-      : "Running Smart Audio-Energy Multi-Cam Director..."
-  );
+  showStatus(`Analyzing with ${model}...`);
   try {
     const resp = await fetch("/api/highlights/analyze", {
       method: "POST",
@@ -1921,10 +2205,10 @@ el.btnAnalyzeGemini.addEventListener("click", async () => {
         use_smart_fallback_if_no_key: true,
       }),
     });
-    if (!resp.ok) throw new Error((await resp.json()).detail || "Analysis failed");
+    if (!resp.ok) throw new Error((await resp.json()).detail || "Failed");
     renderState(await resp.json(), false);
   } catch (err) {
-    alert(`Highlight Analysis Error: ${err.message}`);
+    alert(`Error: ${err.message}`);
   } finally {
     hideStatus();
   }
@@ -1932,17 +2216,9 @@ el.btnAnalyzeGemini.addEventListener("click", async () => {
 
 el.btnExport.addEventListener("click", async () => {
   const fmt = el.exportFormatSelect.value;
-  const seqName = el.projectNameInput.value.trim() || "Beat_Minecraft_In_2_Hours";
+  const seqName = el.projectNameInput.value.trim() || "DualSync_Export";
 
   if (IS_STATIC_CLOUD) {
-    if (fmt === "stem_leelai" || fmt === "stem_matthew") {
-      const a = document.createElement("a");
-      a.href = "./cloud_media/voices.m4a";
-      a.download = `${seqName}_voices_separated.m4a`;
-      a.click();
-      return;
-    }
-    // Client-side EDL / JSON export on GitHub Pages
     const enabled = (projectState?.highlights || []).filter((h) => h.enabled);
     let content = `TITLE: ${seqName}\nFCM: NON-DROP FRAME\n\n`;
     enabled.forEach((h, i) => {
@@ -1953,34 +2229,24 @@ el.btnExport.addEventListener("click", async () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${seqName}_21_Scenes.edl`;
+    a.download = `${seqName}.edl`;
     a.click();
     URL.revokeObjectURL(url);
     return;
   }
 
-  showStatus(
-    fmt === "mp4_reel"
-      ? "Rendering stitched multi-POV MP4 story reel via FFmpeg..."
-      : `Generating ${fmt} timeline with all 21 synced scenes for non-destructive NLE import...`
-  );
+  showStatus(`Exporting ${fmt}...`);
   try {
     const resp = await fetch("/api/export", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        format: fmt,
-        sequence_name: seqName,
-        include_disabled: false,
-      }),
+      body: JSON.stringify({ format: fmt, sequence_name: seqName, include_disabled: false }),
     });
     if (!resp.ok) throw new Error((await resp.json()).detail || "Export failed");
-
     const blob = await resp.blob();
     const disp = resp.headers.get("Content-Disposition") || "";
     const match = disp.match(/filename="([^"]+)"/);
-    const filename = match ? match[1] : `${seqName}.${fmt === "mp4_reel" ? "mp4" : "xml"}`;
-
+    const filename = match ? match[1] : `${seqName}.xml`;
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -1996,7 +2262,7 @@ el.btnExport.addEventListener("click", async () => {
   }
 });
 
-// Transport & View Mode Listeners
+// Transport & View Mode
 el.btnPlayPause.addEventListener("click", togglePlayback);
 el.btnSplitCut.addEventListener("click", splitCutAtPlayhead);
 el.btnCyclePov.addEventListener("click", cyclePovAtPlayhead);
@@ -2027,115 +2293,37 @@ el.btnNextCut.addEventListener("click", () => {
   if (pts.length > 0) syncVideosToMasterTime(pts[0] + 0.02, true);
 });
 
-el.muteA.addEventListener("change", () => {
-  applyVoiceMixerGains();
-});
-el.muteB.addEventListener("change", () => {
-  applyVoiceMixerGains();
-});
+el.muteA.addEventListener("change", () => applyVoiceMixerGains());
+el.muteB.addEventListener("change", () => applyVoiceMixerGains());
 
-// Per-Person Studio Voice Mixer + Auto-Mute Mode Listeners
+// Voice Mixer
 const selectAutoMuteMode = document.getElementById("selectAutoMuteMode");
 const sliderVolMatt = document.getElementById("sliderVolMatt");
 const sliderVolLee = document.getElementById("sliderVolLee");
+const sliderVolDeskMatt = document.getElementById("sliderVolDeskMatt");
+const sliderVolDeskLee = document.getElementById("sliderVolDeskLee");
 const btnMuteMattVoice = document.getElementById("btnMuteMattVoice");
 const btnMuteLeeVoice = document.getElementById("btnMuteLeeVoice");
-const btnPresetLeeBoost = document.getElementById("btnPresetLeeBoost");
-const btnPresetEqualVoice = document.getElementById("btnPresetEqualVoice");
+const btnMuteDeskMatt = document.getElementById("btnMuteDeskMatt");
+const btnMuteDeskLee = document.getElementById("btnMuteDeskLee");
 
 selectAutoMuteMode?.addEventListener("change", (e) => {
   initWebAudioVoiceMixer();
-  autoMuteMode = e.target.value || "speaker_and_pov";
+  autoMuteMode = e.target.value || "separated_4stem";
   lastAutoSwitchMs = 0;
   applyVoiceMixerGains(masterTime);
 });
 
-sliderVolMatt?.addEventListener("input", (e) => {
-  initWebAudioVoiceMixer();
-  volMattPct = parseInt(e.target.value, 10) || 0;
-  if (volMattPct > 0) mattVoiceMuted = false;
-  applyVoiceMixerGains();
-});
+sliderVolMatt?.addEventListener("input", (e) => { initWebAudioVoiceMixer(); volMattPct = parseInt(e.target.value, 10) || 0; if (volMattPct > 0) mattVoiceMuted = false; applyVoiceMixerGains(); });
+sliderVolLee?.addEventListener("input", (e) => { initWebAudioVoiceMixer(); volLeePct = parseInt(e.target.value, 10) || 0; if (volLeePct > 0) leeVoiceMuted = false; applyVoiceMixerGains(); });
+btnMuteMattVoice?.addEventListener("click", () => { initWebAudioVoiceMixer(); mattVoiceMuted = !mattVoiceMuted; applyVoiceMixerGains(); });
+btnMuteLeeVoice?.addEventListener("click", () => { initWebAudioVoiceMixer(); leeVoiceMuted = !leeVoiceMuted; applyVoiceMixerGains(); });
+sliderVolDeskMatt?.addEventListener("input", (e) => { initWebAudioVoiceMixer(); volDeskMattPct = parseInt(e.target.value, 10) || 0; if (volDeskMattPct > 0) mattDeskMuted = false; applyVoiceMixerGains(); });
+sliderVolDeskLee?.addEventListener("input", (e) => { initWebAudioVoiceMixer(); volDeskLeePct = parseInt(e.target.value, 10) || 0; if (volDeskLeePct > 0) leeDeskMuted = false; applyVoiceMixerGains(); });
+btnMuteDeskMatt?.addEventListener("click", () => { initWebAudioVoiceMixer(); mattDeskMuted = !mattDeskMuted; applyVoiceMixerGains(); });
+btnMuteDeskLee?.addEventListener("click", () => { initWebAudioVoiceMixer(); leeDeskMuted = !leeDeskMuted; applyVoiceMixerGains(); });
 
-sliderVolLee?.addEventListener("input", (e) => {
-  initWebAudioVoiceMixer();
-  volLeePct = parseInt(e.target.value, 10) || 0;
-  if (volLeePct > 0) leeVoiceMuted = false;
-  applyVoiceMixerGains();
-});
-
-btnMuteMattVoice?.addEventListener("click", () => {
-  initWebAudioVoiceMixer();
-  mattVoiceMuted = !mattVoiceMuted;
-  applyVoiceMixerGains();
-});
-
-btnMuteLeeVoice?.addEventListener("click", () => {
-  initWebAudioVoiceMixer();
-  leeVoiceMuted = !leeVoiceMuted;
-  applyVoiceMixerGains();
-});
-
-sliderVolDeskMatt?.addEventListener("input", (e) => {
-  initWebAudioVoiceMixer();
-  volDeskMattPct = parseInt(e.target.value, 10) || 0;
-  if (volDeskMattPct > 0) mattDeskMuted = false;
-  applyVoiceMixerGains();
-});
-
-sliderVolDeskLee?.addEventListener("input", (e) => {
-  initWebAudioVoiceMixer();
-  volDeskLeePct = parseInt(e.target.value, 10) || 0;
-  if (volDeskLeePct > 0) leeDeskMuted = false;
-  applyVoiceMixerGains();
-});
-
-btnMuteDeskMatt?.addEventListener("click", () => {
-  initWebAudioVoiceMixer();
-  mattDeskMuted = !mattDeskMuted;
-  applyVoiceMixerGains();
-});
-
-btnMuteDeskLee?.addEventListener("click", () => {
-  initWebAudioVoiceMixer();
-  leeDeskMuted = !leeDeskMuted;
-  applyVoiceMixerGains();
-});
-
-btnPresetLeeBoost?.addEventListener("click", () => {
-  initWebAudioVoiceMixer();
-  volMattPct = 100;
-  volLeePct = 145;
-  volDeskMattPct = 80;
-  volDeskLeePct = 0;
-  mattVoiceMuted = false;
-  leeVoiceMuted = false;
-  mattDeskMuted = false;
-  leeDeskMuted = true;
-  if (sliderVolMatt) sliderVolMatt.value = "100";
-  if (sliderVolLee) sliderVolLee.value = "145";
-  if (sliderVolDeskMatt) sliderVolDeskMatt.value = "80";
-  if (sliderVolDeskLee) sliderVolDeskLee.value = "0";
-  applyVoiceMixerGains();
-});
-
-btnPresetEqualVoice?.addEventListener("click", () => {
-  initWebAudioVoiceMixer();
-  volMattPct = 100;
-  volLeePct = 125;
-  volDeskMattPct = 80;
-  volDeskLeePct = 0;
-  mattVoiceMuted = false;
-  leeVoiceMuted = false;
-  mattDeskMuted = false;
-  leeDeskMuted = true;
-  if (sliderVolMatt) sliderVolMatt.value = "100";
-  if (sliderVolLee) sliderVolLee.value = "125";
-  if (sliderVolDeskMatt) sliderVolDeskMatt.value = "80";
-  if (sliderVolDeskLee) sliderVolDeskLee.value = "0";
-  applyVoiceMixerGains();
-});
-
+// Tab switching
 document.querySelectorAll(".tab-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
@@ -2154,6 +2342,7 @@ el.timelineZoom.addEventListener("input", () => {
 
 [el.projectNameInput, el.playerAName, el.playerBName].forEach((inp) => {
   inp.addEventListener("change", async () => {
+    if (IS_STATIC_CLOUD) return;
     const resp = await fetch("/api/project/meta", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -2167,7 +2356,7 @@ el.timelineZoom.addEventListener("input", () => {
   });
 });
 
-// Live Broadcast Camera Switcher Deck buttons & Timeline Mode Switcher & Audio Mixer Popover
+// Camera Switcher & Timeline Mode
 document.getElementById("btnSwitchPovA")?.addEventListener("click", () => punchOrSwitchPov("A"));
 document.getElementById("btnSwitchPovSplit")?.addEventListener("click", () => punchOrSwitchPov("SPLIT"));
 document.getElementById("btnSwitchPovB")?.addEventListener("click", () => punchOrSwitchPov("B"));
@@ -2195,8 +2384,8 @@ function setTimelineViewMode(mode) {
   if (tlWindowHint) {
     tlWindowHint.innerHTML =
       mode === "scene"
-        ? `Drag yellow <b>⟦ IN</b> &amp; <b>⟧ OUT</b> handles to make scene longer/shorter · Drag <b>⋮</b> between cuts`
-        : `Showing all 21 scenes across the 2-hour session · Click any scene to jump`;
+        ? `Drag <b>⟦ IN</b> & <b>⟧ OUT</b> handles · Drag <b>⋮</b> between cuts`
+        : `Full session timeline · Click any scene to jump`;
   }
   renderTimeline();
 }
@@ -2204,9 +2393,33 @@ function setTimelineViewMode(mode) {
 btnTlModeScene?.addEventListener("click", () => setTimelineViewMode("scene"));
 btnTlModeFull?.addEventListener("click", () => setTimelineViewMode("full"));
 
-// Keyboard shortcuts
+// Keyboard shortcuts (including Ctrl+Z / Ctrl+Shift+Z)
 window.addEventListener("keydown", (e) => {
   if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
+
+  // Ctrl+Z = Undo, Ctrl+Shift+Z = Redo
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+    e.preventDefault();
+    if (e.shiftKey) {
+      performRedo();
+    } else {
+      performUndo();
+    }
+    return;
+  }
+  // Ctrl+Y = Redo
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+    e.preventDefault();
+    performRedo();
+    return;
+  }
+  // Ctrl+S = Save snapshot
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    saveSnapshot();
+    return;
+  }
+
   if (e.code === "Space") {
     e.preventDefault();
     togglePlayback();
@@ -2240,40 +2453,35 @@ window.addEventListener("keydown", (e) => {
 
 window.addEventListener("resize", () => renderTimeline());
 
+// Publish & Share
 const btnPublishSite = document.getElementById("btnPublishSite");
 if (btnPublishSite) {
   if (IS_STATIC_CLOUD) {
-    btnPublishSite.textContent = "☁️ Live Cloud Site";
-    btnPublishSite.title = "Running on permanent GitHub Pages CDN — edits auto-save in browser & export via XML/JSON";
+    btnPublishSite.textContent = "☁️ Cloud";
   }
   btnPublishSite.addEventListener("click", async () => {
     const permanentUrl = "https://matthewbrandonbowers.github.io/dualsync-studio/?pw=leelai";
     if (IS_STATIC_CLOUD) {
       try {
-        await navigator.clipboard.writeText(`${permanentUrl} (Password: leelai)`);
-        const orig = btnPublishSite.textContent;
-        btnPublishSite.textContent = "✅ Link Copied!";
-        setTimeout(() => {
-          btnPublishSite.textContent = orig;
-        }, 3000);
+        await navigator.clipboard.writeText(permanentUrl);
+        btnPublishSite.textContent = "✅ Copied!";
+        setTimeout(() => { btnPublishSite.textContent = "☁️ Cloud"; }, 3000);
       } catch (_) {}
       return;
     }
     const orig = btnPublishSite.textContent;
     btnPublishSite.textContent = "⏳ Publishing...";
-    showStatus("Publishing latest trims, cuts & review notes to https://matthewbrandonbowers.github.io/dualsync-studio/?pw=leelai...");
+    showStatus("Publishing to site...");
     try {
       const r = await fetch("/api/publish-site", { method: "POST" });
       if (!r.ok) throw new Error("Publish failed");
-      await navigator.clipboard.writeText(`${permanentUrl} (Password: leelai)`);
-      btnPublishSite.textContent = "✅ Published & Copied!";
+      await navigator.clipboard.writeText(permanentUrl);
+      btnPublishSite.textContent = "✅ Published!";
     } catch (err) {
-      btnPublishSite.textContent = "⚠️ Publish Error";
+      btnPublishSite.textContent = "⚠️ Error";
     } finally {
       hideStatus();
-      setTimeout(() => {
-        btnPublishSite.textContent = orig;
-      }, 4000);
+      setTimeout(() => { btnPublishSite.textContent = orig; }, 4000);
     }
   });
 }
@@ -2281,33 +2489,20 @@ if (btnPublishSite) {
 const btnShareLink = document.getElementById("btnShareLink");
 if (btnShareLink) {
   btnShareLink.addEventListener("click", async () => {
-    let url = "https://matthewbrandonbowers.github.io/dualsync-studio/?pw=leelai";
-    let pw = "leelai";
-    if (!IS_STATIC_CLOUD) {
-      try {
-        const r = await fetch("/api/share-url");
-        if (r.ok) {
-          const data = await r.json();
-          if (data.password) pw = data.password;
-        }
-      } catch (_) {}
-    }
-    const shareText = `https://matthewbrandonbowers.github.io/dualsync-studio/?pw=${pw} (Password: ${pw})`;
+    const shareText = "https://matthewbrandonbowers.github.io/dualsync-studio/?pw=leelai";
     try {
       await navigator.clipboard.writeText(shareText);
       const orig = btnShareLink.textContent;
-      btnShareLink.textContent = `✅ Copied Hosted Site Link!`;
-      setTimeout(() => {
-        btnShareLink.textContent = orig;
-      }, 4000);
+      btnShareLink.textContent = "✅ Copied!";
+      setTimeout(() => { btnShareLink.textContent = orig; }, 3000);
     } catch (_) {
-      prompt("Copy this shareable hosted link & password for Leelai:", shareText);
+      prompt("Copy this link:", shareText);
     }
   });
 }
 
 // =========================================================================
-// FRAME.IO REVIEW, SCRUBBER, LUDWIG CO-OP STYLE & YOUTUBE IMPORTER
+// SIDEBAR TABS, REVIEW, COMMENTS, STYLES, AI PRESETS
 // =========================================================================
 let reviewState = null;
 
@@ -2324,9 +2519,6 @@ document.querySelectorAll(".fio-tab").forEach((tab) => {
   tab.addEventListener("click", () => switchSidebarTab(tab.getAttribute("data-tab")));
 });
 
-document.getElementById("btnOpenRefTab")?.addEventListener("click", () => switchSidebarTab("reference"));
-
-// Click corner PiP to swap active main POV
 el.viewportA.addEventListener("click", () => {
   if (el.viewportA.classList.contains("pip-mate")) cyclePovAtPlayhead();
 });
@@ -2334,7 +2526,7 @@ el.viewportB.addEventListener("click", () => {
   if (el.viewportB.classList.contains("pip-mate")) cyclePovAtPlayhead();
 });
 
-// Frame.io Scrubber click-and-drag 1:1 seek
+// Overview Scrubber
 const fioScrubberTrack = document.getElementById("fioScrubberTrack");
 if (fioScrubberTrack) {
   const seekOverviewBarAtClientX = (clientX) => {
@@ -2355,7 +2547,7 @@ if (fioScrubberTrack) {
   });
 }
 
-// Story Cut vs Raw 2h Mode Pills
+// Story Cut vs Raw Mode
 const btnModeStoryReel = document.getElementById("btnModeStoryReel");
 const btnModeRawSession = document.getElementById("btnModeRawSession");
 btnModeStoryReel?.addEventListener("click", () => {
@@ -2369,7 +2561,7 @@ btnModeRawSession?.addEventListener("click", () => {
   btnModeStoryReel?.classList.remove("active");
 });
 
-// Toggle Pro Waveform Timeline Drawer
+// Timeline Drawer Toggle
 document.getElementById("btnToggleTimelineDrawer")?.addEventListener("click", () => {
   const drawer = document.getElementById("proTimelineDrawer");
   if (drawer) {
@@ -2378,48 +2570,37 @@ document.getElementById("btnToggleTimelineDrawer")?.addEventListener("click", ()
   }
 });
 
-// Ludwig Co-Op Style vs Clean Cinema Cut Toggles
+// Style Toggles
 const btnStyleLudwig = document.getElementById("btnStyleLudwig");
 const btnStyleClean = document.getElementById("btnStyleClean");
 const chkShowPip = document.getElementById("chkShowPip");
-const chkShowHud = document.getElementById("chkShowHud");
-const ludwigHudOverlay = document.getElementById("ludwigHudOverlay");
-
-function applyStyleConfig() {
-  const showHud = chkShowHud ? chkShowHud.checked : true;
-  if (ludwigHudOverlay) ludwigHudOverlay.classList.toggle("hidden", !showHud);
-  updateDirectorViewportUI(masterTime);
-}
 
 btnStyleLudwig?.addEventListener("click", () => {
   btnStyleLudwig.classList.add("active");
   btnStyleClean?.classList.remove("active");
   if (chkShowPip) chkShowPip.checked = true;
-  if (chkShowHud) chkShowHud.checked = true;
-  applyStyleConfig();
+  updateDirectorViewportUI(masterTime);
 });
 
 btnStyleClean?.addEventListener("click", () => {
   btnStyleClean.classList.add("active");
   btnStyleLudwig?.classList.remove("active");
   if (chkShowPip) chkShowPip.checked = false;
-  if (chkShowHud) chkShowHud.checked = false;
-  applyStyleConfig();
+  updateDirectorViewportUI(masterTime);
 });
 
-chkShowPip?.addEventListener("change", applyStyleConfig);
-chkShowHud?.addEventListener("change", applyStyleConfig);
+chkShowPip?.addEventListener("change", () => updateDirectorViewportUI(masterTime));
 
-// Apply Ludwig Co-Op Pacing across all 21 scenes
+// AI Director Presets
 async function applyAiDirectorPreset(mode) {
   if (!projectState?.highlights?.length) return;
+  pushUndoState("AI preset");
   const badge = document.getElementById("activeAiPresetBadge");
   document.querySelectorAll(".ai-preset-btn").forEach((b) => b.classList.remove("active"));
 
   if (mode === "ludwig") {
     document.getElementById("btnAiPresetLudwig")?.classList.add("active");
-    if (badge) badge.textContent = "Ludwig Co-Op";
-    showStatus("Applying Ludwig Co-Op 50/50 Vertical Split + Action Teammate PiP cuts across all 21 scenes...");
+    if (badge) badge.textContent = "Co-Op";
     projectState.highlights.forEach((hl, idx) => {
       const dur = hl.end_sec - hl.start_sec;
       const s1 = Number((hl.start_sec + dur * 0.36).toFixed(2));
@@ -2427,15 +2608,14 @@ async function applyAiDirectorPreset(mode) {
       const lead = idx % 2 === 0 ? "A" : "B";
       const second = lead === "A" ? "B" : "A";
       hl.camera_cuts = [
-        { id: `${hl.id}_c1`, start_sec: hl.start_sec, end_sec: s1, active_pov: "SPLIT", reason: "Ludwig 50/50 Full-Height Co-Op Split" },
-        { id: `${hl.id}_c2`, start_sec: s1, end_sec: s2, active_pov: lead, reason: `${lead} Action Main + ${second} Corner PiP` },
-        { id: `${hl.id}_c3`, start_sec: s2, end_sec: hl.end_sec, active_pov: idx === projectState.highlights.length - 1 ? "SPLIT" : second, reason: "Co-Op Reaction / Climax" },
+        { id: `${hl.id}_c1`, start_sec: hl.start_sec, end_sec: s1, active_pov: "SPLIT", reason: "Co-Op Split" },
+        { id: `${hl.id}_c2`, start_sec: s1, end_sec: s2, active_pov: lead, reason: `${lead} Main` },
+        { id: `${hl.id}_c3`, start_sec: s2, end_sec: hl.end_sec, active_pov: idx === projectState.highlights.length - 1 ? "SPLIT" : second, reason: "Reaction" },
       ];
     });
   } else if (mode === "speaker") {
     document.getElementById("btnAiPresetSpeaker")?.classList.add("active");
-    if (badge) badge.textContent = "Active Speaker";
-    showStatus("Cutting all 21 scenes by Matthew vs Leelai's isolated microphone speech envelopes...");
+    if (badge) badge.textContent = "Speaker";
     const binSec = voiceEnvelopes?.bin_sec || 0.5;
     projectState.highlights.forEach((hl) => {
       const dur = hl.end_sec - hl.start_sec;
@@ -2445,47 +2625,28 @@ async function applyAiDirectorPreset(mode) {
       for (let w = 0; w < numWindows; w++) {
         const ws = Number((hl.start_sec + w * winDur).toFixed(2));
         const we = Number((w === numWindows - 1 ? hl.end_sec : hl.start_sec + (w + 1) * winDur).toFixed(2));
-        let sumM = 0;
-        let sumL = 0;
-        let cnt = 0;
+        let sumM = 0, sumL = 0, cnt = 0;
         if (voiceEnvelopes?.matthew && voiceEnvelopes?.leelai) {
           const i0 = Math.max(0, Math.floor(ws / binSec));
           const i1 = Math.min(voiceEnvelopes.count - 1, Math.ceil(we / binSec));
-          for (let i = i0; i <= i1; i++) {
-            sumM += voiceEnvelopes.matthew[i] || 0;
-            sumL += voiceEnvelopes.leelai[i] || 0;
-            cnt++;
-          }
+          for (let i = i0; i <= i1; i++) { sumM += voiceEnvelopes.matthew[i] || 0; sumL += voiceEnvelopes.leelai[i] || 0; cnt++; }
         }
         const avgM = cnt > 0 ? sumM / cnt : 0.2;
         const avgL = cnt > 0 ? sumL / cnt : 0.2;
-        let pov = "A";
-        let reason = "Matthew speaking lead (Isolated Mic A2)";
-        if (avgM > 0.14 && avgL > 0.14 && Math.abs(avgM - avgL) < 0.16) {
-          pov = "SPLIT";
-          reason = "Both Matthew & Leelai speaking / reacting (50/50 Co-Op Split)";
-        } else if (avgL > avgM * 1.02 && avgL > 0.06) {
-          pov = "B";
-          reason = "Leelai speaking lead (Isolated Studio Mic B1)";
-        }
+        let pov = "A", reason = "A speaking";
+        if (avgM > 0.14 && avgL > 0.14 && Math.abs(avgM - avgL) < 0.16) { pov = "SPLIT"; reason = "Both speaking"; }
+        else if (avgL > avgM * 1.02 && avgL > 0.06) { pov = "B"; reason = "B speaking"; }
         if (rawCuts.length > 0 && rawCuts[rawCuts.length - 1].active_pov === pov) {
           rawCuts[rawCuts.length - 1].end_sec = we;
         } else {
-          rawCuts.push({
-            id: `${hl.id}_sp_${w}`,
-            start_sec: ws,
-            end_sec: we,
-            active_pov: pov,
-            reason,
-          });
+          rawCuts.push({ id: `${hl.id}_sp_${w}`, start_sec: ws, end_sec: we, active_pov: pov, reason });
         }
       }
       hl.camera_cuts = rawCuts;
     });
   } else if (mode === "action") {
     document.getElementById("btnAiPresetAction")?.classList.add("active");
-    if (badge) badge.textContent = "Combat Focus";
-    showStatus("Applying high-tempo combat action cuts with teammate PiP across all 21 scenes...");
+    if (badge) badge.textContent = "Action";
     projectState.highlights.forEach((hl, idx) => {
       const dur = hl.end_sec - hl.start_sec;
       const step = Math.max(3.5, Math.min(6.0, dur / 4));
@@ -2501,7 +2662,7 @@ async function applyAiDirectorPreset(mode) {
           start_sec: Number(cur.toFixed(2)),
           end_sec: next === hl.end_sec || hl.end_sec - next < 1.8 ? hl.end_sec : next,
           active_pov: pov,
-          reason: pov === "SPLIT" ? "Climax 50/50 Split" : `Fast Combat Cut (${pov} + Corner PiP)`,
+          reason: pov === "SPLIT" ? "Split" : `Action ${pov}`,
         });
         cur = cuts[cuts.length - 1].end_sec;
         k++;
@@ -2511,7 +2672,6 @@ async function applyAiDirectorPreset(mode) {
   }
 
   await saveHighlightsToServer();
-  hideStatus();
 }
 
 document.getElementById("btnApplyLudwigToAll")?.addEventListener("click", () => applyAiDirectorPreset("ludwig"));
@@ -2528,7 +2688,7 @@ document.querySelectorAll(".act-filter-pill").forEach((pill) => {
   });
 });
 
-// Frame.io Review State & Comments
+// Review & Comments
 function renderReviewState(rev) {
   reviewState = rev;
   const statusSel = document.getElementById("reviewStatusSelect");
@@ -2538,7 +2698,7 @@ function renderReviewState(rev) {
     const ytTitle = document.getElementById("ytRefTitle");
     const ytMeta = document.getElementById("ytRefMeta");
     const ytVid = document.getElementById("ytRefVideo");
-    if (ytTitle) ytTitle.textContent = rev.youtube_reference.title || "YouTube Reference";
+    if (ytTitle) ytTitle.textContent = rev.youtube_reference.title || "Reference Clip";
     if (ytMeta) ytMeta.textContent = `${rev.youtube_reference.author || ""} · ${rev.youtube_reference.chapter_title || ""}`;
     if (ytVid && rev.youtube_reference.clip_url && !ytVid.src.endsWith(rev.youtube_reference.clip_url)) {
       ytVid.src = rev.youtube_reference.clip_url;
@@ -2577,14 +2737,14 @@ function renderReviewState(rev) {
       card.className = `fio-comment-card ${c.resolved ? "resolved" : ""}`;
       card.innerHTML = `
         <div class="cmt-header">
-          <div class="cmt-author">${c.author} <span style="color:#94a3b8;font-weight:400;">(${c.role || ""})</span></div>
-          <button class="cmt-tc-btn" data-seek-cmt="${c.timestamp_sec}">@ ${formatTime(c.timestamp_sec)} (S${c.scene_number || 1})</button>
+          <div class="cmt-author">${c.author}</div>
+          <button class="cmt-tc-btn" data-seek-cmt="${c.timestamp_sec}">@ ${formatTime(c.timestamp_sec)}</button>
         </div>
         <div class="cmt-body">${c.text}</div>
         <div class="cmt-actions">
           <label style="cursor:pointer;display:flex;align-items:center;gap:4px;">
             <input type="checkbox" data-resolve-cmt="${c.id}" ${c.resolved ? "checked" : ""} />
-            <span>${c.resolved ? "Resolved" : "Mark Complete"}</span>
+            <span>${c.resolved ? "Resolved" : "Mark Done"}</span>
           </label>
           <button class="btn btn-xs btn-ghost" data-del-cmt="${c.id}">Delete</button>
         </div>
@@ -2594,9 +2754,7 @@ function renderReviewState(rev) {
   });
 
   listEl?.querySelectorAll("[data-seek-cmt]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      syncVideosToMasterTime(parseFloat(btn.getAttribute("data-seek-cmt")), true);
-    });
+    btn.addEventListener("click", () => syncVideosToMasterTime(parseFloat(btn.getAttribute("data-seek-cmt")), true));
   });
   listEl?.querySelectorAll("[data-resolve-cmt]").forEach((chk) => {
     chk.addEventListener("change", async () => {
@@ -2672,12 +2830,7 @@ document.getElementById("quickCommentForm")?.addEventListener("submit", async (e
   const r = await fetch("/api/review/comments", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      author,
-      timestamp_sec: masterTime,
-      scene_number: sceneNum,
-      text,
-    }),
+    body: JSON.stringify({ author, timestamp_sec: masterTime, scene_number: sceneNum, text }),
   });
   if (r.ok) {
     inp.value = "";
@@ -2686,20 +2839,19 @@ document.getElementById("quickCommentForm")?.addEventListener("submit", async (e
   }
 });
 
-// YouTube Video / Reference Importer via yt-dlp
+// YouTube Importer
 document.getElementById("btnImportYoutube")?.addEventListener("click", async () => {
   const url = document.getElementById("ytImportUrl")?.value.trim();
   const target = document.getElementById("ytImportTarget")?.value || "reference";
   if (!url) return;
-  showStatus(`Downloading & importing YouTube video (${url}) via yt-dlp...`);
+  showStatus(`Importing YouTube video...`);
   try {
     const r = await fetch("/api/youtube/import", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url, target, duration_sec: 90.0 }),
     });
-    if (!r.ok) throw new Error((await r.json()).detail || "YouTube import failed");
-    const res = await r.json();
+    if (!r.ok) throw new Error((await r.json()).detail || "Failed");
     if (target === "reference") {
       const revResp = await fetch("/api/review");
       if (revResp.ok) renderReviewState(await revResp.json());
@@ -2708,14 +2860,14 @@ document.getElementById("btnImportYoutube")?.addEventListener("click", async () 
       if (projResp.ok) renderState(await projResp.json(), true);
     }
   } catch (err) {
-    alert(`YouTube Import Error: ${err.message}`);
+    alert(`Error: ${err.message}`);
   } finally {
     hideStatus();
   }
 });
 
 // =========================================================================
-// VIDEO PLAYBACK, QUALITY & SMOOTHNESS TUNER
+// VIDEO PLAYBACK & QUALITY TUNER
 // =========================================================================
 let cachedTunnelUrl = "https://plus-macintosh-breeds-graphic.trycloudflare.com";
 
@@ -2741,62 +2893,39 @@ async function detectBestBackendServer() {
     }
   } catch (_) {}
 
-  if (streamSourceMode === "cloud") {
-    resolvedBackendBaseUrl = "CLOUD";
-    return resolvedBackendBaseUrl;
-  }
-  if (streamSourceMode === "local") {
-    resolvedBackendBaseUrl = IS_STATIC_CLOUD ? "http://127.0.0.1:8765" : "";
-    return resolvedBackendBaseUrl;
-  }
-  if (streamSourceMode === "tunnel") {
-    resolvedBackendBaseUrl = IS_STATIC_CLOUD ? cachedTunnelUrl : "";
-    return resolvedBackendBaseUrl;
-  }
+  if (streamSourceMode === "cloud") { resolvedBackendBaseUrl = "CLOUD"; return; }
+  if (streamSourceMode === "local") { resolvedBackendBaseUrl = IS_STATIC_CLOUD ? "http://127.0.0.1:8765" : ""; return; }
+  if (streamSourceMode === "tunnel") { resolvedBackendBaseUrl = IS_STATIC_CLOUD ? cachedTunnelUrl : ""; return; }
 
-  // "auto" mode
-  if (!IS_STATIC_CLOUD) {
-    resolvedBackendBaseUrl = "";
-    return resolvedBackendBaseUrl;
-  }
+  if (!IS_STATIC_CLOUD) { resolvedBackendBaseUrl = ""; return; }
 
-  // When running on GitHub Pages (IS_STATIC_CLOUD), probe local SSD server first, then live Cloudflare tunnel!
   try {
     const rLocal = await fetchWithTimeout("http://127.0.0.1:8765/api/health", 1100);
-    if (rLocal.ok) {
-      resolvedBackendBaseUrl = "http://127.0.0.1:8765";
-      return resolvedBackendBaseUrl;
-    }
+    if (rLocal.ok) { resolvedBackendBaseUrl = "http://127.0.0.1:8765"; return; }
   } catch (_) {}
 
   if (cachedTunnelUrl) {
     try {
       const rTun = await fetchWithTimeout(`${cachedTunnelUrl}/api/health`, 2200);
-      if (rTun.ok) {
-        resolvedBackendBaseUrl = cachedTunnelUrl;
-        return resolvedBackendBaseUrl;
-      }
+      if (rTun.ok) { resolvedBackendBaseUrl = cachedTunnelUrl; return; }
     } catch (_) {}
   }
 
   resolvedBackendBaseUrl = "CLOUD";
-  return resolvedBackendBaseUrl;
 }
 
 function getQualityBadgeLabel(q, base) {
   if (base === "CLOUD") return "360p Cloud";
-  if (q === "1080p") return "1080p60 Raw";
-  if (q === "720p") return "720p HD";
-  if (q === "360p") return "360p Fast";
-  return "540p Smooth";
+  if (q === "1080p") return "1080p60";
+  if (q === "720p") return "720p";
+  if (q === "360p") return "360p";
+  return "540p";
 }
 
 function updatePlaybackTunerBadges() {
   const badge = document.getElementById("playbackQualityBadge");
   const speedSuffix = userPlaybackSpeed !== 1.0 ? ` · ${userPlaybackSpeed}x` : "";
-  if (badge) {
-    badge.textContent = `${getQualityBadgeLabel(currentVideoQuality, resolvedBackendBaseUrl)}${speedSuffix}`;
-  }
+  if (badge) badge.textContent = `${getQualityBadgeLabel(currentVideoQuality, resolvedBackendBaseUrl)}${speedSuffix}`;
 
   document.querySelectorAll("#qualityPillRow .tuner-pill").forEach((btn) => {
     btn.classList.toggle("active", btn.getAttribute("data-quality") === currentVideoQuality);
@@ -2810,10 +2939,8 @@ function updatePlaybackTunerBadges() {
 
   const selSync = document.getElementById("selectSyncEngineMode");
   if (selSync) selSync.value = syncEngineMode;
-
   const selSrv = document.getElementById("selectStreamSource");
   if (selSrv) selSrv.value = streamSourceMode;
-
   const sldTol = document.getElementById("sliderDriftTolerance");
   const lblTol = document.getElementById("labelDriftTolerance");
   if (sldTol) sldTol.value = String(driftToleranceSec);
@@ -2830,8 +2957,7 @@ async function applyMediaStreamSettings(preservePlayhead = true) {
 
   if (!projectState?.track_a) return;
 
-  let urlA = "";
-  let urlB = "";
+  let urlA = "", urlB = "";
   if (resolvedBackendBaseUrl === "CLOUD" || currentVideoQuality === "360p") {
     if (resolvedBackendBaseUrl === "CLOUD") {
       urlA = "./cloud_media/track_a.mp4";
@@ -2848,25 +2974,16 @@ async function applyMediaStreamSettings(preservePlayhead = true) {
   projectState.track_a.media_url = urlA;
   if (projectState.track_b) projectState.track_b.media_url = urlB;
 
-  if (el.videoA.getAttribute("src") !== urlA) {
-    el.videoA.src = urlA;
-    el.videoA.load();
-  }
-  if (projectState.track_b && el.videoB.getAttribute("src") !== urlB) {
-    el.videoB.src = urlB;
-    el.videoB.load();
-  }
+  if (el.videoA.getAttribute("src") !== urlA) { el.videoA.src = urlA; el.videoA.load(); }
+  if (projectState.track_b && el.videoB.getAttribute("src") !== urlB) { el.videoB.src = urlB; el.videoB.load(); }
 
   if (preservePlayhead) {
     const restoreSeek = () => {
       syncVideosToMasterTime(savedTime, true);
       if (wasPlaying) startPlayback();
     };
-    if (el.videoA.readyState >= 1) {
-      restoreSeek();
-    } else {
-      el.videoA.addEventListener("loadedmetadata", restoreSeek, { once: true });
-    }
+    if (el.videoA.readyState >= 1) restoreSeek();
+    else el.videoA.addEventListener("loadedmetadata", restoreSeek, { once: true });
   }
 }
 
@@ -2919,15 +3036,11 @@ function initPlaybackTunerUI() {
   }
 
   document.querySelectorAll("#speedPillRow .tuner-pill").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      setPlaybackSpeed(btn.getAttribute("data-speed"));
-    });
+    btn.addEventListener("click", () => setPlaybackSpeed(btn.getAttribute("data-speed")));
   });
 
   document.querySelectorAll("#quickTransportSpeedRow .spd-pill").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      setPlaybackSpeed(btn.getAttribute("data-speed"));
-    });
+    btn.addEventListener("click", () => setPlaybackSpeed(btn.getAttribute("data-speed")));
   });
 
   document.getElementById("selectStreamSource")?.addEventListener("change", async (e) => {
@@ -2943,21 +3056,28 @@ function initPlaybackTunerUI() {
   updatePlaybackTunerBadges();
 }
 
+// =========================================================================
 // INIT
+// =========================================================================
 (async function initStudio() {
   initPlaybackTunerUI();
+  initUserSystem();
+  renderSnapshotsList();
+  updateUndoRedoButtons();
   await detectBestBackendServer();
-  // Client-side password check on static cloud hosting (?pw=leelai)
+
+  // Client-side password check on static cloud hosting
   if (IS_STATIC_CLOUD) {
     const params = new URLSearchParams(window.location.search);
     const pwParam = (params.get("pw") || "").trim().toLowerCase();
     if (pwParam === "leelai") {
       localStorage.setItem("dualsync_pw_ok", "leelai");
+      currentUser = { username: "matthew", display_name: "Matthew" };
+      localStorage.setItem("dualsync_current_user", JSON.stringify(currentUser));
+      updateUserUI();
     }
     if (localStorage.getItem("dualsync_pw_ok") !== "leelai") {
-      const entered = (prompt("🔒 Enter DualSync Studio Password (for Matthew & Leelai):", "leelai") || "")
-        .trim()
-        .toLowerCase();
+      const entered = (prompt("Enter DualSync Studio password:", "") || "").trim().toLowerCase();
       if (entered === "leelai") {
         localStorage.setItem("dualsync_pw_ok", "leelai");
       }
@@ -2997,9 +3117,7 @@ function initPlaybackTunerUI() {
   let storySnap = null;
   try {
     const snapResp = await fetch(`./story_project.json?t=${Date.now()}`);
-    if (snapResp.ok) {
-      storySnap = await snapResp.json();
-    }
+    if (snapResp.ok) storySnap = await snapResp.json();
   } catch (_) {}
 
   let state = null;
@@ -3023,38 +3141,16 @@ function initPlaybackTunerUI() {
       const savedHl = localStorage.getItem("dualsync_cloud_highlights_v2");
       if (savedHl) {
         const parsed = JSON.parse(savedHl);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          state.highlights = parsed;
-        }
+        if (Array.isArray(parsed) && parsed.length > 0) state.highlights = parsed;
       }
     } catch (_) {}
   } else if (storySnap && (!state || !state.track_a || state.track_a.filename.includes("demo_"))) {
-    showStatus("Loading 2-Hour Minecraft Speedrun Session (Matthew & Leelai) into live player...");
+    showStatus("Loading session...");
     try {
-      await fetch("/api/load-path/A", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: storySnap.track_a.path }),
-      });
-      await fetch("/api/load-path/B", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: storySnap.track_b.path }),
-      });
-      await fetch("/api/project/meta", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          project_name: storySnap.project_name,
-          player_a_name: storySnap.player_a_name,
-          player_b_name: storySnap.player_b_name,
-        }),
-      });
-      await fetch("/api/highlights/update", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(storySnap.highlights),
-      });
+      await fetch("/api/load-path/A", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: storySnap.track_a.path }) });
+      await fetch("/api/load-path/B", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: storySnap.track_b.path }) });
+      await fetch("/api/project/meta", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project_name: storySnap.project_name, player_a_name: storySnap.player_a_name, player_b_name: storySnap.player_b_name }) });
+      await fetch("/api/highlights/update", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(storySnap.highlights) });
       state = storySnap;
     } catch (_) {
       state = storySnap;
@@ -3062,7 +3158,6 @@ function initPlaybackTunerUI() {
       hideStatus();
     }
   } else if (storySnap && state) {
-    // Preserve full 2-hour waveforms and rich scene metadata from story_project.json
     state.sync = storySnap.sync;
     if (state.highlights?.length === storySnap.highlights?.length) {
       state.highlights = state.highlights.map((h, i) => ({
@@ -3071,10 +3166,7 @@ function initPlaybackTunerUI() {
         act: h.act || storySnap.highlights[i].act,
         scene_number: h.scene_number || storySnap.highlights[i].scene_number,
         local_offset_sec: h.local_offset_sec ?? storySnap.highlights[i].local_offset_sec,
-        thumbnail_url: (h.thumbnail_url || storySnap.highlights[i].thumbnail_url || "").replace(
-          /^\/thumbnails\//,
-          "./thumbnails/"
-        ),
+        thumbnail_url: (h.thumbnail_url || storySnap.highlights[i].thumbnail_url || "").replace(/^\/thumbnails\//, "./thumbnails/"),
       }));
     }
   }
@@ -3099,5 +3191,9 @@ function initPlaybackTunerUI() {
       masterTime = state.highlights[0].start_sec;
     }
     renderState(state, true);
+    setSaveStatus("saved");
   }
+
+  // Load project list for the project selector
+  await loadProjectList();
 })();

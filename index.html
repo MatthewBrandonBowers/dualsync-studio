@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DualSync Frame.io Studio — Matthew &amp; Leelai (2-Hour Minecraft Co-Op Cut)</title>
+  <title>DualSync Studio</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <!-- FRAME.IO STYLE TOP HEADER BAR -->
+  <!-- TOP HEADER BAR -->
   <header class="fio-topbar">
     <div class="fio-brand-left">
       <div class="fio-logo">
@@ -15,60 +15,79 @@
         <span class="dot b"></span>
       </div>
       <div class="fio-breadcrumbs">
-        <span class="crumb-muted">Matthew &amp; Leelai</span>
+        <!-- Project selector dropdown (populated by JS) -->
+        <select id="projectSelector" class="project-selector" title="Switch project">
+          <option value="__current__">Current Project</option>
+          <option value="__new__">＋ New Project...</option>
+        </select>
         <span class="crumb-sep">/</span>
-        <input id="projectNameInput" class="fio-title-input" type="text" value="Beat Minecraft in 2 Hours — Co-Op Story Cut" title="Click to rename project" />
+        <input id="projectNameInput" class="fio-title-input" type="text" value="Untitled Project" title="Click to rename project" />
       </div>
-      <select id="reviewStatusSelect" class="fio-status-pill status-needs_review" title="Frame.io Review Status">
+      <select id="reviewStatusSelect" class="fio-status-pill status-needs_review" title="Review Status">
         <option value="needs_review">🟣 Needs Review</option>
         <option value="in_progress">🔵 In Progress</option>
         <option value="needs_changes">🟠 Needs Changes</option>
-        <option value="approved">🟢 Approved for YouTube</option>
+        <option value="approved">🟢 Approved</option>
       </select>
     </div>
 
-    <!-- CENTER STYLE SWITCHER (LUDWIG CO-OP STYLE VS CLEAN CINEMA) -->
+    <!-- CENTER STYLE SWITCHER -->
     <div class="fio-center-controls">
       <div class="fio-segmented">
-        <button id="btnStyleLudwig" class="seg-btn active" title="Matches Ludwig &amp; CDawgVA (17:50): Full-Height 50/50 Split + Teammate Corner PiP + Challenge Progress &amp; Run Timer HUD">
-          🔥 Ludwig Co-Op Style
+        <button id="btnStyleLudwig" class="seg-btn active" title="Side-by-side co-op split + PiP switching">
+          🔥 Co-Op Style
         </button>
-        <button id="btnStyleClean" class="seg-btn" title="Clean single-POV cinema switching without broadcast HUD">
+        <button id="btnStyleClean" class="seg-btn" title="Clean single-POV cinema switching">
           🎬 Clean Cut
         </button>
       </div>
-      <label class="fio-toggle-chip" title="Always show second player's live POV in a corner Picture-in-Picture box during single-player cuts">
+      <label class="fio-toggle-chip" title="Always show teammate's POV in a corner Picture-in-Picture box">
         <input id="chkShowPip" type="checkbox" checked />
-        <span>👥 Always Show Both Players (PiP + 50/50)</span>
-      </label>
-      <label class="fio-toggle-chip" title="Show Ludwig-style bottom-right Challenge Progress Checklist &amp; Live Run Timer">
-        <input id="chkShowHud" type="checkbox" checked />
-        <span>⏱️ Challenge HUD</span>
+        <span>👥 PiP</span>
       </label>
     </div>
 
-    <!-- RIGHT ACTIONS: YOUTUBE REF, SHARE, EXPORT -->
+    <!-- RIGHT ACTIONS -->
     <div class="fio-right-actions">
-      <button id="btnOpenRefTab" class="btn btn-ghost btn-xs" title="Watch the downloaded Ludwig @ 17:50 reference clip or import any YouTube URL">
-        📺 Reference (17:50)
+      <!-- Save status indicator -->
+      <span id="saveStatusIndicator" class="save-status-indicator">
+        <span id="saveStatusDot" class="save-dot saved"></span>
+        <span id="saveStatusText">Saved</span>
+      </span>
+      <button id="btnUndoAction" class="btn btn-ghost btn-xs" title="Undo last edit (Ctrl+Z)" disabled>
+        ↩ Undo
       </button>
-      <button id="btnPublishSite" class="btn btn-ghost btn-xs" title="Push latest local trims, camera cuts &amp; notes directly to the permanent hosted site (https://matthewbrandonbowers.github.io/dualsync-studio/?pw=leelai)">
-        🚀 Publish to Site
+      <button id="btnRedoAction" class="btn btn-ghost btn-xs" title="Redo (Ctrl+Shift+Z)" disabled>
+        ↪ Redo
       </button>
-      <button id="btnShareLink" class="btn btn-accent btn-xs" title="Copy permanent password-protected hosted site link to send to Leelai">
-        🔗 Share with Leelai
+      <button id="btnSaveSnapshot" class="btn btn-ghost btn-xs" title="Save a named snapshot of current edits">
+        💾 Save
+      </button>
+      <button id="btnPublishSite" class="btn btn-ghost btn-xs" title="Publish to hosted site">
+        🚀 Publish
+      </button>
+      <button id="btnShareLink" class="btn btn-accent btn-xs" title="Copy share link">
+        🔗 Share
       </button>
       <div class="export-dropdown-wrap">
         <select id="exportFormatSelect" class="export-select">
-          <option value="fcp7_xml_highlights">Premiere / Resolve XML (21-Scene Story Cut)</option>
-          <option value="fcp7_xml_full_synced">Premiere / Resolve XML (Full 2h Synced Timeline)</option>
+          <option value="fcp7_xml_highlights">Premiere / Resolve XML (Story Cut)</option>
+          <option value="fcp7_xml_full_synced">Premiere / Resolve XML (Full Synced)</option>
           <option value="fcpxml">Final Cut / Resolve FCPXML v1.9</option>
           <option value="edl">CMX 3600 EDL</option>
-          <option value="mp4_reel">Render Stitched MP4 Video (FFmpeg)</option>
-          <option value="stem_leelai">🎙️ Download Leelai Synced Studio Voice (.m4a)</option>
-          <option value="stem_matthew">🎙️ Download Matthew Clean Voice + Game (.m4a)</option>
+          <option value="mp4_reel">Render MP4 Video (FFmpeg)</option>
         </select>
         <button id="btnExport" class="btn btn-primary btn-xs">📥 Export</button>
+      </div>
+      <!-- User avatar / login indicator -->
+      <div id="userMenuWrap" class="user-menu-wrap">
+        <button id="btnUserMenu" class="btn-user-avatar" title="Account">
+          <span id="userAvatarInitial" class="user-avatar-initial">?</span>
+        </button>
+        <div id="userDropdownMenu" class="user-dropdown hidden">
+          <div id="userDisplayName" class="user-display-name">Not signed in</div>
+          <button id="btnLogout" class="btn btn-ghost btn-xs btn-block">Sign Out</button>
+        </div>
       </div>
     </div>
   </header>
@@ -79,71 +98,54 @@
     <span id="statusText">Processing...</span>
   </div>
 
-  <!-- MAIN PRO EDITOR WORKSPACE (CAPCUT / DAVINCI CUT PAGE STYLE) -->
+  <!-- MAIN EDITOR WORKSPACE -->
   <main class="fio-workspace">
-    <!-- CENTER: PROGRAM MONITOR + BROADCAST SWITCHER DECK + FOCUSED DRAG-TRIM TIMELINE -->
+    <!-- CENTER: PROGRAM MONITOR + TIMELINE -->
     <section class="fio-stage-column">
-      <!-- COMPACT SCENE HEADER + QUICK CHAPTER STRIP -->
+      <!-- SCENE HEADER + CHAPTER STRIP -->
       <div class="fio-scene-header">
         <div class="scene-now-playing">
           <span id="activeSceneBadge" class="scene-pill-badge">SCENE 1 / 21</span>
-          <span id="activeSceneTitle" class="scene-main-title">The 2-Hour Co-Op Challenge Begins</span>
-          <span id="activeSceneAct" class="scene-act-pill">Act I: The Setup</span>
+          <span id="activeSceneTitle" class="scene-main-title">Scene Title</span>
+          <span id="activeSceneAct" class="scene-act-pill">Act I</span>
         </div>
         <div id="chapterPillsStrip" class="chapter-pills-strip inline-strip"></div>
         <div class="scene-mode-right">
-          <span id="totalStoryDurationLabel" class="story-runtime-badge">Story Cut: 10m 42s</span>
-          <button id="btnModeStoryReel" class="mode-pill active" title="Play only the 21 edited story scenes back-to-back">▶ Story Cut (21)</button>
-          <button id="btnModeRawSession" class="mode-pill" title="Scrub anywhere across the full 2-hour raw session">🔍 Full 2h Raw</button>
+          <span id="totalStoryDurationLabel" class="story-runtime-badge">0m 00s</span>
+          <button id="btnModeStoryReel" class="mode-pill active" title="Play only edited story scenes">▶ Story Cut</button>
+          <button id="btnModeRawSession" class="mode-pill" title="Scrub full raw session">🔍 Full Raw</button>
           <input id="chkPlayHighlightsOnly" type="checkbox" checked class="hidden" />
         </div>
       </div>
 
-      <!-- 16:9 BROADCAST PLAYER CANVAS -->
+      <!-- 16:9 PLAYER -->
       <div class="fio-player-shell">
         <audio id="masterAudio" src="/api/stream/VOICES?v=6" preload="auto" crossorigin="anonymous"></audio>
         <audio id="desktopAudio" src="/api/stream/DESKTOPS?v=6" preload="auto" crossorigin="anonymous"></audio>
         <div id="monitorsContainer" class="monitors-container view-director ludwig-style show-pip">
-          <!-- MATTHEW POV A -->
+          <!-- POV A -->
           <div id="viewportA" class="video-viewport pov-a active-pov">
             <video id="videoA" preload="auto" playsinline muted></video>
             <div class="pov-corner-tag tag-a">
               <span class="live-dot a"></span>
-              <span id="overlayLabelA">MATTHEW</span>
+              <span id="overlayLabelA">POV A</span>
               <span id="localTcA" class="tag-tc">00:00.0</span>
             </div>
           </div>
 
-          <!-- LEELAI POV B -->
+          <!-- POV B -->
           <div id="viewportB" class="video-viewport pov-b pip-mate">
             <video id="videoB" preload="auto" playsinline muted></video>
             <div class="pov-corner-tag tag-b">
               <span class="live-dot b"></span>
-              <span id="overlayLabelB">LEELAI</span>
+              <span id="overlayLabelB">POV B</span>
               <span id="localTcB" class="tag-tc">00:00.0</span>
             </div>
           </div>
 
-          <!-- CENTER DIVIDER FOR LUDWIG 50/50 FULL-HEIGHT SPLIT -->
+          <!-- CENTER DIVIDER FOR 50/50 SPLIT -->
           <div id="splitCenterDivider" class="split-center-divider">
             <span class="vs-pill">CO-OP</span>
-          </div>
-
-          <!-- LUDWIG "HARDEST GAMING CHALLENGE" STYLE HUD OVERLAY (BOTTOM-RIGHT) -->
-          <div id="ludwigHudOverlay" class="ludwig-hud-overlay">
-            <div class="ludwig-hud-top">
-              <span class="hud-run-label">CHALLENGE: BEAT MINECRAFT</span>
-              <span id="hudProgressFraction" class="hud-fraction">1/5</span>
-            </div>
-            <div id="hudMilestoneStack" class="hud-milestone-stack">
-              <div class="hud-ms prev">✓ Spawn &amp; Iron Gear</div>
-              <div class="hud-ms current">▶ Enter The Nether</div>
-              <div class="hud-ms next">○ Blaze Rods &amp; Pearls</div>
-            </div>
-            <div class="ludwig-hud-timer-row">
-              <span class="timer-caption">RUN TIME</span>
-              <span id="hudRunTimer" class="hud-digital-timer">00:06:06.00</span>
-            </div>
           </div>
 
           <!-- TOP-CENTER ACTIVE FRAMING PILL -->
@@ -151,16 +153,16 @@
             🔥 50/50 CO-OP SPLIT
           </div>
 
-          <!-- FLOATING LIVE DRAG-TRIM FEEDBACK HUD -->
+          <!-- FLOATING TRIM FEEDBACK HUD -->
           <div id="trimDragTooltip" class="trim-drag-tooltip hidden">
             ✂️ Dragging Trim Handle...
           </div>
         </div>
       </div>
 
-      <!-- ULTRA-SLIM OVERVIEW SCRUBBER WITH CHAPTERS & COMMENT PINS -->
+      <!-- OVERVIEW SCRUBBER -->
       <div class="fio-scrubber-wrap">
-        <div id="fioScrubberTrack" class="fio-scrubber-track" title="2-Hour Overview Bar — Click anywhere to jump">
+        <div id="fioScrubberTrack" class="fio-scrubber-track" title="Overview — Click anywhere to jump">
           <div id="fioScrubberChapters" class="fio-scrubber-chapters"></div>
           <div id="fioScrubberProgress" class="fio-scrubber-progress"></div>
           <div id="fioScrubberComments" class="fio-scrubber-comments"></div>
@@ -168,57 +170,57 @@
         </div>
       </div>
 
-      <!-- DAVINCI CUT-PAGE CONTROL DECK: TRANSPORT + LIVE BROADCAST CAMERA SWITCHER + TOOLS -->
+      <!-- TRANSPORT + CAMERA SWITCHER -->
       <div class="fio-controls-bar pro-switcher-deck">
-        <!-- LEFT: TRANSPORT, SPEED (1x / 1.5x / 2x) & TIMECODE -->
+        <!-- LEFT: TRANSPORT -->
         <div class="transport-cluster">
           <button id="btnPrevScene" class="btn btn-icon" title="Previous Scene">⏮</button>
           <button id="btnPlayPause" class="btn btn-play-main" title="Play / Pause (Space)">▶ Play</button>
           <button id="btnNextScene" class="btn btn-icon" title="Next Scene">⏭</button>
-          <div class="transport-speed-pills" id="quickTransportSpeedRow" title="Playback Speed (1x / 1.5x / 2x)">
+          <div class="transport-speed-pills" id="quickTransportSpeedRow" title="Playback Speed">
             <button type="button" class="spd-pill active" data-speed="1">1x</button>
             <button type="button" class="spd-pill" data-speed="1.5">1.5x</button>
             <button type="button" class="spd-pill" data-speed="2">2x</button>
           </div>
-          <div id="masterTimecode" class="fio-timecode">00:06:06.00</div>
-          <span id="activeSceneRangeLabel" class="scene-len-pill" title="Current Scene Duration">35.0s</span>
-          <button id="btnPrevCut" class="btn btn-ghost btn-xs" title="Previous Camera Cut ([)">◀ Cut</button>
-          <button id="btnNextCut" class="btn btn-ghost btn-xs" title="Next Camera Cut (])">Cut ▶</button>
+          <div id="masterTimecode" class="fio-timecode">00:00:00.00</div>
+          <span id="activeSceneRangeLabel" class="scene-len-pill" title="Scene Duration">0.0s</span>
+          <button id="btnPrevCut" class="btn btn-ghost btn-xs" title="Previous Cut ([)">◀ Cut</button>
+          <button id="btnNextCut" class="btn btn-ghost btn-xs" title="Next Cut (])">Cut ▶</button>
         </div>
 
-        <!-- CENTER: LIVE BROADCAST CAMERA SWITCHER DECK ([1] MATT · [2] 50/50 SPLIT · [3] LEELAI) -->
+        <!-- CENTER: CAMERA SWITCHER -->
         <div class="broadcast-switcher-cluster">
-          <span class="switcher-deck-label">LIVE CAM:</span>
-          <button id="btnSwitchPovA" class="cam-switcher-btn cam-a" data-pov="A" title="Switch to Matthew Full + Leelai PiP (Shortcut: Key 1)">
+          <span class="switcher-deck-label">CAM:</span>
+          <button id="btnSwitchPovA" class="cam-switcher-btn cam-a" data-pov="A" title="Switch to POV A (Key 1)">
             <span class="cam-key">1</span>
-            <span class="cam-title">🟦 Matt + PiP</span>
+            <span class="cam-title">🟦 A + PiP</span>
           </button>
-          <button id="btnSwitchPovSplit" class="cam-switcher-btn cam-split" data-pov="SPLIT" title="Switch to Ludwig 50/50 Vertical Split (Shortcut: Key 2)">
+          <button id="btnSwitchPovSplit" class="cam-switcher-btn cam-split" data-pov="SPLIT" title="50/50 Split (Key 2)">
             <span class="cam-key">2</span>
-            <span class="cam-title">⚡ 50/50 Split</span>
+            <span class="cam-title">⚡ 50/50</span>
           </button>
-          <button id="btnSwitchPovB" class="cam-switcher-btn cam-b" data-pov="B" title="Switch to Leelai Full + Matthew PiP (Shortcut: Key 3)">
+          <button id="btnSwitchPovB" class="cam-switcher-btn cam-b" data-pov="B" title="Switch to POV B (Key 3)">
             <span class="cam-key">3</span>
-            <span class="cam-title">🟪 Leelai + PiP</span>
+            <span class="cam-title">🟪 B + PiP</span>
           </button>
-          <label class="live-punch-toggle" title="When checked, pressing 1 / 2 / 3 while playing automatically splits a new camera cut at the playhead!">
+          <label class="live-punch-toggle" title="Pressing 1/2/3 while playing auto-splits a new cut at the playhead">
             <input id="chkLivePunchCut" type="checkbox" checked />
-            <span>🔴 Punch Cut</span>
+            <span>🔴 Punch</span>
           </label>
         </div>
 
-        <!-- RIGHT: EDIT ACTIONS, VIDEO QUALITY TUNER & POPOVER AUDIO MIXER -->
+        <!-- RIGHT: EDIT ACTIONS & SETTINGS -->
         <div class="framing-cluster">
-          <button id="btnSplitCut" class="btn btn-ghost btn-xs" title="Split camera cut at playhead (Key: S)">✂️ Split (S)</button>
-          <button id="btnDeleteCut" class="btn btn-ghost btn-xs" title="Merge/remove current camera cut (Key: Backspace)">🗑️ Merge Cut</button>
-          <button id="btnAddHighlightHere" class="btn btn-ghost btn-xs" title="Bookmark new scene at playhead (Key: H)">➕ New Scene</button>
+          <button id="btnSplitCut" class="btn btn-ghost btn-xs" title="Split cut at playhead (S)">✂️ Split</button>
+          <button id="btnDeleteCut" class="btn btn-ghost btn-xs" title="Merge cut (Backspace)">🗑️ Merge</button>
+          <button id="btnAddHighlightHere" class="btn btn-ghost btn-xs" title="New scene at playhead (H)">➕ Scene</button>
           <button id="btnCyclePov" class="btn btn-ghost btn-xs hidden" title="Cycle POV (V)">🎥</button>
-          <button id="btnTogglePlaybackPopover" class="btn btn-playback-pill btn-xs" title="Adjust Video Quality, Smooth Sync Engine, Playback Speed &amp; Stream Server">
-            ⚙️ Video Playback
-            <span id="playbackQualityBadge" class="playback-pill-badge">540p Smooth</span>
+          <button id="btnTogglePlaybackPopover" class="btn btn-playback-pill btn-xs" title="Video Quality & Playback Settings">
+            ⚙️ Playback
+            <span id="playbackQualityBadge" class="playback-pill-badge">540p</span>
           </button>
-          <button id="btnToggleVoiceMixer" class="btn btn-mixer-pill btn-xs" title="Open 4-Stem Separated Audio Mixer Drawer">
-            🎚️ 4-Stem Audio
+          <button id="btnToggleVoiceMixer" class="btn btn-mixer-pill btn-xs" title="Audio Mixer">
+            🎚️ Audio
             <span class="mini-vu-pair">
               <i id="miniVuDotMatt" class="mini-vu-dot matt"></i>
               <i id="miniVuDotLee" class="mini-vu-dot lee"></i>
@@ -228,30 +230,30 @@
         </div>
       </div>
 
-      <!-- VIDEO PLAYBACK, QUALITY & SMOOTHNESS TUNER POPOVER -->
+      <!-- VIDEO PLAYBACK & QUALITY TUNER POPOVER -->
       <div id="playbackSettingsPopover" class="fio-playback-tuner-bar hidden">
         <div class="tuner-group">
-          <span class="tuner-label">🎬 Video Quality:</span>
+          <span class="tuner-label">🎬 Quality:</span>
           <div class="tuner-pill-row" id="qualityPillRow">
-            <button type="button" class="tuner-pill" data-quality="1080p" title="Original 1080p60 OBS Source Recording (Highest Bitrate)">🔥 1080p60 Raw</button>
-            <button type="button" class="tuner-pill" data-quality="720p" title="1280x720 @ 30fps HD Proxy (1.6 GB)">💎 720p HD</button>
-            <button type="button" class="tuner-pill active" data-quality="540p" title="960x540 @ 30fps Smooth Proxy (350 MB — Best Balance of Sharpness &amp; Zero-Lag Dual-POV)">🚀 540p Smooth</button>
-            <button type="button" class="tuner-pill" data-quality="360p" title="640x360 @ 30fps Ultra-Light Stream (80 MB — Instant on Slow Wi-Fi)">⚡ 360p Fast</button>
+            <button type="button" class="tuner-pill" data-quality="1080p" title="Original 1080p60 Source">1080p60</button>
+            <button type="button" class="tuner-pill" data-quality="720p" title="720p @ 30fps HD Proxy">720p HD</button>
+            <button type="button" class="tuner-pill active" data-quality="540p" title="540p @ 30fps Smooth Proxy">540p</button>
+            <button type="button" class="tuner-pill" data-quality="360p" title="360p @ 30fps Ultra-Light">360p</button>
           </div>
         </div>
 
         <div class="tuner-group">
-          <span class="tuner-label">🧠 Smoothness Mode:</span>
-          <select id="selectSyncEngineMode" class="tuner-select" title="Choose how the dual video decoders are synchronized">
-            <option value="free_run" selected>🧈 Butter-Smooth (Free-Run 1.0x Clock — Zero Frame Jitter)</option>
-            <option value="single_decoder">⚡ Turbo Single-Decoder (Pause Hidden POV — 2x Faster GPU)</option>
-            <option value="gentle_lock">🎯 Gentle 1Hz Micro-Sync (Tight A/B Lock)</option>
+          <span class="tuner-label">🧠 Sync:</span>
+          <select id="selectSyncEngineMode" class="tuner-select" title="Dual video sync mode">
+            <option value="free_run" selected>Butter-Smooth</option>
+            <option value="single_decoder">Turbo Single-Decoder</option>
+            <option value="gentle_lock">Gentle Micro-Sync</option>
           </select>
         </div>
 
         <div class="tuner-group">
-          <span class="tuner-label">🎚️ Drift Tolerance:</span>
-          <input id="sliderDriftTolerance" type="range" min="0.15" max="2.00" step="0.05" value="0.55" class="tuner-slider" title="How much A/B drift is allowed before re-seeking during playback (higher = fewer seek hitches)" />
+          <span class="tuner-label">🎚️ Drift:</span>
+          <input id="sliderDriftTolerance" type="range" min="0.15" max="2.00" step="0.05" value="0.55" class="tuner-slider" />
           <span id="labelDriftTolerance" class="tuner-val">0.55s</span>
         </div>
 
@@ -269,89 +271,88 @@
 
         <div class="tuner-group">
           <span class="tuner-label">📡 Server:</span>
-          <select id="selectStreamSource" class="tuner-select" title="Choose where video streams are loaded from">
-            <option value="auto" selected>⚡ Auto-Best (Local SSD → Live HD Tunnel → Cloud CDN)</option>
-            <option value="local">💻 Local SSD (127.0.0.1:8765)</option>
-            <option value="tunnel">🌐 Live Cloudflare HD Tunnel</option>
-            <option value="cloud">☁️ GitHub Pages CDN (360p30 Offline)</option>
+          <select id="selectStreamSource" class="tuner-select" title="Video stream source">
+            <option value="auto" selected>Auto-Best</option>
+            <option value="local">Local SSD</option>
+            <option value="tunnel">Cloudflare Tunnel</option>
+            <option value="cloud">Cloud CDN</option>
           </select>
         </div>
 
         <div class="tuner-telemetry">
           <span id="telemetryFpsBadge" class="telem-chip telem-ok">60 FPS</span>
-          <span id="telemetryDriftBadge" class="telem-chip">Drift: 0.01s</span>
+          <span id="telemetryDriftBadge" class="telem-chip">Drift: 0ms</span>
           <span id="telemetryBufferBadge" class="telem-chip">Buffer: Ready</span>
-          <button id="btnForceResyncNow" type="button" class="btn btn-ghost btn-xxs" title="Immediately lock both video tracks and audio stems to the exact playhead">🔄 Re-Sync Now</button>
+          <button id="btnForceResyncNow" type="button" class="btn btn-ghost btn-xxs" title="Re-sync all tracks">🔄 Sync</button>
         </div>
       </div>
 
-      <!-- COLLAPSIBLE 4-STEM SEPARATED STUDIO MIXER POPOVER (HIDDEN BY DEFAULT TO KEEP UI CLEAN) -->
+      <!-- AUDIO MIXER POPOVER -->
       <div id="voiceMixerPopover" class="fio-voice-mixer-bar mixer-popover hidden">
         <div class="mixer-badge-left">
           <span class="mixer-icon">🎚️</span>
-          <select id="selectAutoMuteMode" class="auto-mute-select" title="Choose how the 4 separated OBS audio tracks are mixed">
-            <option value="separated_4stem" selected>✨ 4-Stem Zero-Echo Mix (Lee Hearing Sync 294.15s)</option>
-            <option value="speaker_and_pov">🎙️ Auto-Mute Inactive Speaker + POV Switch</option>
-            <option value="pov_only">🎥 Auto-Mute Strictly by Camera POV Switch (A vs B)</option>
-            <option value="manual">🎚️ Manual 4-Track Sliders</option>
+          <select id="selectAutoMuteMode" class="auto-mute-select" title="Audio mix mode">
+            <option value="separated_4stem" selected>4-Stem Zero-Echo Mix</option>
+            <option value="speaker_and_pov">Auto-Mute by Speaker + POV</option>
+            <option value="pov_only">Auto-Mute by Camera POV</option>
+            <option value="manual">Manual 4-Track Sliders</option>
           </select>
-          <span id="autoMuteStatusBadge" class="mixer-sub">✨ ZERO-ECHO 4-STEMS</span>
+          <span id="autoMuteStatusBadge" class="mixer-sub">4-STEM MIX</span>
         </div>
 
-        <div id="channelStripMatt" class="voice-channel-strip channel-matt" title="Matthew's Isolated Microphone (Track A Stream 3 / 0:a:2)">
-          <button id="btnMuteMattVoice" class="voice-mute-btn">🟦 Matt Mic</button>
+        <div id="channelStripMatt" class="voice-channel-strip channel-matt" title="POV A — Isolated Microphone">
+          <button id="btnMuteMattVoice" class="voice-mute-btn">🟦 Mic A</button>
           <input id="sliderVolMatt" type="range" min="0" max="250" step="5" value="100" class="voice-slider slider-matt" />
           <span id="labelVolMatt" class="voice-pct-label">100%</span>
           <div class="vu-meter-track"><div id="vuFillMatt" class="vu-meter-fill fill-matt"></div></div>
         </div>
 
-        <div id="channelStripLee" class="voice-channel-strip channel-lee" title="Leelai's Separated Studio Microphone (Track B Stream 2 / 0:a:1)">
-          <button id="btnMuteLeeVoice" class="voice-mute-btn">🟪 Leelai Mic</button>
+        <div id="channelStripLee" class="voice-channel-strip channel-lee" title="POV B — Isolated Microphone">
+          <button id="btnMuteLeeVoice" class="voice-mute-btn">🟪 Mic B</button>
           <input id="sliderVolLee" type="range" min="0" max="250" step="5" value="145" class="voice-slider slider-lee" />
           <span id="labelVolLee" class="voice-pct-label">145%</span>
           <div class="vu-meter-track"><div id="vuFillLee" class="vu-meter-fill fill-lee"></div></div>
         </div>
 
-        <div id="channelStripDeskMatt" class="voice-channel-strip channel-desk-a" title="Matthew's Separated Desktop / Game Audio (Track A Stream 2 / 0:a:1)">
-          <button id="btnMuteDeskMatt" class="voice-mute-btn">🎮 Matt Game</button>
+        <div id="channelStripDeskMatt" class="voice-channel-strip channel-desk-a" title="POV A — Desktop / Game Audio">
+          <button id="btnMuteDeskMatt" class="voice-mute-btn">🎮 Game A</button>
           <input id="sliderVolDeskMatt" type="range" min="0" max="200" step="5" value="80" class="voice-slider slider-desk-a" />
           <span id="labelVolDeskMatt" class="voice-pct-label">80%</span>
           <div class="vu-meter-track"><div id="vuFillDeskMatt" class="vu-meter-fill fill-desk-a"></div></div>
         </div>
 
-        <div id="channelStripDeskLee" class="voice-channel-strip channel-desk-b" title="Leelai's Separated Desktop Audio (Track B Stream 1 / 0:a:0 — Muted at 0% by default so Discord echo is 100% eliminated!)">
-          <button id="btnMuteDeskLee" class="voice-mute-btn muted">🖥️ Lee Desktop</button>
+        <div id="channelStripDeskLee" class="voice-channel-strip channel-desk-b" title="POV B — Desktop Audio">
+          <button id="btnMuteDeskLee" class="voice-mute-btn muted">🖥️ Desk B</button>
           <input id="sliderVolDeskLee" type="range" min="0" max="200" step="5" value="0" class="voice-slider slider-desk-b" />
           <span id="labelVolDeskLee" class="voice-pct-label">MUTE</span>
           <div class="vu-meter-track"><div id="vuFillDeskLee" class="vu-meter-fill fill-desk-b"></div></div>
         </div>
       </div>
 
-      <!-- PRO MAGNETIC SCENE & WAVEFORM TIMELINE WITH DRAGGABLE IN/OUT TRIM HANDLES -->
+      <!-- PRO TIMELINE -->
       <section id="proTimelineDrawer" class="fio-timeline-drawer">
         <div class="timeline-header">
           <div class="timeline-title-group">
             <div class="tl-mode-segmented">
-              <button id="btnTlModeScene" class="tl-mode-btn active" title="Zoom into the active scene so you can drag its In/Out handles and camera cuts directly with your mouse!">
-                🎯 Focused Scene Trim (Drag Handles)
+              <button id="btnTlModeScene" class="tl-mode-btn active" title="Focused scene trim with draggable handles">
+                🎯 Scene Trim
               </button>
-              <button id="btnTlModeFull" class="tl-mode-btn" title="Show the full 2-hour session timeline">
-                🗺️ Full 2h Map
+              <button id="btnTlModeFull" class="tl-mode-btn" title="Full session timeline">
+                🗺️ Full Map
               </button>
             </div>
-            <span id="tlWindowHint" class="tl-window-hint">Drag yellow <b>⟦ IN</b> &amp; <b>⟧ OUT</b> handles to make scene longer/shorter · Drag <b>|↔|</b> between cuts</span>
+            <span id="tlWindowHint" class="tl-window-hint">Drag <b>⟦ IN</b> &amp; <b>⟧ OUT</b> handles · Drag <b>⋮</b> between cuts</span>
           </div>
 
-          <!-- QUICK NUDGE BUTTONS + ZOOM -->
           <div class="timeline-zoom-group">
             <div class="quick-trim-pills">
-              <button id="btnStartEarlier5" class="btn btn-trim btn-xxs" title="Start scene 5s earlier">⏪ In -5s</button>
-              <button id="btnStartEarlier2" class="btn btn-trim btn-xxs" title="Start scene 2s earlier">In -2s</button>
-              <button id="btnStartLater2" class="btn btn-trim btn-xxs" title="Trim 2s off start">In +2s</button>
-              <button id="btnEndShorter2" class="btn btn-trim btn-xxs" title="Trim 2s off end">Out -2s</button>
-              <button id="btnEndLonger3" class="btn btn-extend btn-xxs" title="Extend end +3s">+3s</button>
-              <button id="btnEndLonger5" class="btn btn-extend btn-xxs" title="Extend end +5s">+5s</button>
-              <button id="btnEndLonger10" class="btn btn-extend-strong btn-xxs" title="Extend end +10s">➕ Out +10s</button>
+              <button id="btnStartEarlier5" class="btn btn-trim btn-xxs" title="Start 5s earlier">⏪ -5s</button>
+              <button id="btnStartEarlier2" class="btn btn-trim btn-xxs" title="Start 2s earlier">-2s</button>
+              <button id="btnStartLater2" class="btn btn-trim btn-xxs" title="Trim 2s off start">+2s</button>
+              <button id="btnEndShorter2" class="btn btn-trim btn-xxs" title="Trim 2s off end">-2s</button>
+              <button id="btnEndLonger3" class="btn btn-extend btn-xxs" title="Extend +3s">+3s</button>
+              <button id="btnEndLonger5" class="btn btn-extend btn-xxs" title="Extend +5s">+5s</button>
+              <button id="btnEndLonger10" class="btn btn-extend-strong btn-xxs" title="Extend +10s">+10s</button>
             </div>
             <label class="mute-toggle"><input id="muteA" type="checkbox" /> Mute A</label>
             <label class="mute-toggle"><input id="muteB" type="checkbox" /> Mute B</label>
@@ -370,19 +371,19 @@
               <div id="directorTrackLane" class="track-lane director-lane"></div>
             </div>
             <div class="track-row track-a-row">
-              <div class="track-label"><span class="track-name" id="tlLabelA">🟦 Matt Mic (A2)</span></div>
+              <div class="track-label"><span class="track-name" id="tlLabelA">🟦 Mic A</span></div>
               <div class="track-lane waveform-lane"><canvas id="waveformCanvasA" height="34"></canvas></div>
             </div>
             <div class="track-row track-b-row">
-              <div class="track-label"><span class="track-name" id="tlLabelB">🟪 Leelai Mic (B1)</span></div>
+              <div class="track-label"><span class="track-name" id="tlLabelB">🟪 Mic B</span></div>
               <div class="track-lane waveform-lane"><canvas id="waveformCanvasB" height="34"></canvas></div>
             </div>
             <div class="track-row track-a-row">
-              <div class="track-label"><span class="track-name" id="tlLabelDeskA">🎮 Matt Game (A1)</span></div>
+              <div class="track-label"><span class="track-name" id="tlLabelDeskA">🎮 Game A</span></div>
               <div class="track-lane waveform-lane"><canvas id="waveformCanvasDeskA" height="28"></canvas></div>
             </div>
             <div class="track-row track-b-row">
-              <div class="track-label"><span class="track-name" id="tlLabelDeskB">🖥️ Lee Desk (B0)</span></div>
+              <div class="track-label"><span class="track-name" id="tlLabelDeskB">🖥️ Desk B</span></div>
               <div class="track-lane waveform-lane"><canvas id="waveformCanvasDeskB" height="28"></canvas></div>
             </div>
             <div id="playheadLine" class="playhead-line"><div class="playhead-head"></div></div>
@@ -391,36 +392,36 @@
       </section>
     </section>
 
-    <!-- RIGHT SIDEBAR: FRAME.IO COLLABORATION & STORY DRAWER -->
+    <!-- RIGHT SIDEBAR -->
     <aside class="fio-sidebar">
       <div class="fio-tabs">
-        <button class="fio-tab active" data-tab="scenes">🎬 Scenes <span id="clipCountBadge" class="tab-badge">21</span></button>
-        <button class="fio-tab" data-tab="comments">💬 Notes <span id="commentCountBadge" class="tab-badge">4</span></button>
-        <button class="fio-tab" data-tab="reference">📺 Ludwig Ref</button>
-        <button class="fio-tab" data-tab="settings">⚙️ Sync &amp; AI</button>
+        <button class="fio-tab active" data-tab="scenes">🎬 Scenes <span id="clipCountBadge" class="tab-badge">0</span></button>
+        <button class="fio-tab" data-tab="comments">💬 Notes <span id="commentCountBadge" class="tab-badge">0</span></button>
+        <button class="fio-tab" data-tab="reference">📺 Reference</button>
+        <button class="fio-tab" data-tab="settings">⚙️ Settings</button>
       </div>
 
-      <!-- TAB 1: 21 STORY SCENES + CLEAN AI DIRECTOR BAR -->
+      <!-- TAB 1: SCENES + AI DIRECTOR -->
       <div id="tabPane_scenes" class="fio-tab-pane active">
         <div class="ai-director-quickbar">
           <div class="ai-quickbar-header">
-            <span class="ai-qb-title">🤖 Smart AI Camera Director</span>
-            <span id="activeAiPresetBadge" class="ai-qb-badge">Ludwig Co-Op</span>
+            <span class="ai-qb-title">🤖 AI Camera Director</span>
+            <span id="activeAiPresetBadge" class="ai-qb-badge">Co-Op</span>
           </div>
           <div class="ai-preset-buttons">
-            <button id="btnAiPresetLudwig" class="ai-preset-btn active" title="50/50 Full-Height Vertical Splits for banter &amp; climax + Action POV with Teammate PiP">
-              🔥 Ludwig 50/50 + PiP
+            <button id="btnAiPresetLudwig" class="ai-preset-btn active" title="50/50 splits for banter + action POV with PiP">
+              🔥 Co-Op Split
             </button>
-            <button id="btnAiPresetSpeaker" class="ai-preset-btn" title="Automatically cut each scene based on Matthew vs Leelai's isolated microphone speech envelopes">
-              🎙️ Active Speaker Cut
+            <button id="btnAiPresetSpeaker" class="ai-preset-btn" title="Cut based on who is speaking">
+              🎙️ Speaker Cut
             </button>
-            <button id="btnAiPresetAction" class="ai-preset-btn" title="Fast high-tempo action switching during combat &amp; speedrun milestones">
-              ⚔️ Combat Focus
+            <button id="btnAiPresetAction" class="ai-preset-btn" title="Fast action switching">
+              ⚔️ Action
             </button>
           </div>
         </div>
         <div id="actFilterBar" class="act-filter-bar">
-          <button class="act-filter-pill active" data-act="ALL">All (21)</button>
+          <button class="act-filter-pill active" data-act="ALL">All</button>
           <button class="act-filter-pill" data-act="Act I">Act I</button>
           <button class="act-filter-pill" data-act="Act II">Act II</button>
           <button class="act-filter-pill" data-act="Act III">Act III</button>
@@ -428,15 +429,15 @@
           <button class="act-filter-pill" data-act="Act V">Act V</button>
         </div>
         <div class="pane-subheader">
-          <span>Click any scene to load into Focused Drag-Trim Timeline</span>
+          <span>Click any scene to load into the timeline</span>
         </div>
         <div id="highlightsList" class="fio-scenes-list"></div>
       </div>
 
-      <!-- TAB 2: FRAME.IO TIME-STAMPED COMMENTS (MOVED HERE TO DECLUTTER STAGE!) -->
+      <!-- TAB 2: COMMENTS -->
       <div id="tabPane_comments" class="fio-tab-pane">
         <div class="pane-subheader">
-          <span>Frame-Accurate Review Notes (Click timestamp to jump)</span>
+          <span>Frame-Accurate Review Notes</span>
         </div>
         <form id="quickCommentForm" class="fio-sidebar-comment-form">
           <div class="sidebar-comment-top">
@@ -444,64 +445,59 @@
               <option value="Matthew">🟦 Matthew</option>
               <option value="Leelai">🟪 Leelai</option>
             </select>
-            <span id="commentTimeBadge" class="comment-time-badge">@ 00:06:06</span>
+            <span id="commentTimeBadge" class="comment-time-badge">@ 00:00</span>
           </div>
           <div class="sidebar-comment-row">
-            <input id="quickCommentInput" type="text" class="quick-comment-input" placeholder="Add timestamped note here..." />
+            <input id="quickCommentInput" type="text" class="quick-comment-input" placeholder="Add note..." />
             <button type="submit" class="btn btn-primary btn-xs">Post</button>
           </div>
         </form>
         <div id="commentsList" class="fio-comments-list"></div>
       </div>
 
-      <!-- TAB 3: YOUTUBE REFERENCE STYLE (LUDWIG @ 17:50) & DOWNLOADER -->
+      <!-- TAB 3: REFERENCE -->
       <div id="tabPane_reference" class="fio-tab-pane">
         <div class="ref-card">
-          <div class="ref-header-badge">ACTIVE EDITING STYLE TEMPLATE</div>
-          <h3 id="ytRefTitle" class="ref-title">I BEAT the Hardest Gaming Challenge in the World</h3>
-          <div id="ytRefMeta" class="ref-meta">Ludwig &amp; CDawgVA · Chapter @ 17:50: "The Lovers VS The World"</div>
+          <div class="ref-header-badge">STYLE REFERENCE</div>
+          <h3 id="ytRefTitle" class="ref-title">Reference Clip</h3>
+          <div id="ytRefMeta" class="ref-meta">Upload or import a reference clip</div>
           <video id="ytRefVideo" class="ref-video-player" src="./yt_ref_1070.mp4" controls preload="metadata"></video>
-          <div class="ref-style-list">
-            <div class="ref-bullet">✅ <b>Full-Height 50/50 Vertical Split:</b> Both players fill 100% height side-by-side during banter &amp; climax moments (no letterbox bars).</div>
-            <div class="ref-bullet">✅ <b>Action POV + Corner Teammate PiP:</b> Instant full-screen cut during combat while keeping teammate live in corner PiP.</div>
-            <div class="ref-bullet">✅ <b>Corner Challenge Progress HUD:</b> Live run timer + scrolling milestone checklist in bottom-right.</div>
-          </div>
           <button id="btnApplyLudwigToAll" class="btn btn-primary btn-block" style="margin-top:8px;">
-            ✨ Apply Ludwig Co-Op Pacing Across All 21 Scenes
+            ✨ Apply Co-Op Pacing to All Scenes
           </button>
         </div>
 
         <div class="ref-card" style="margin-top:12px;">
-          <div class="ref-header-badge">YOUTUBE API / YT-DLP VIDEO IMPORTER</div>
-          <p class="ref-subtext">Paste any YouTube URL (with optional <code>&amp;t=1070s</code>) to download via <code>yt-dlp</code> as a Reference Clip or import directly into Track A / B:</p>
-          <input id="ytImportUrl" type="text" class="text-input" value="https://www.youtube.com/watch?v=0szxanBi6_c&amp;t=1070s" placeholder="https://www.youtube.com/watch?v=..." />
+          <div class="ref-header-badge">YOUTUBE IMPORTER</div>
+          <p class="ref-subtext">Paste a YouTube URL to download via <code>yt-dlp</code>:</p>
+          <input id="ytImportUrl" type="text" class="text-input" placeholder="https://www.youtube.com/watch?v=..." />
           <div class="yt-import-row">
             <select id="ytImportTarget" class="select-input">
-              <option value="reference">Import as Reference Style Clip</option>
-              <option value="A">Import into Track A (Player 1)</option>
-              <option value="B">Import into Track B (Player 2)</option>
+              <option value="reference">Import as Reference</option>
+              <option value="A">Import into Track A</option>
+              <option value="B">Import into Track B</option>
             </select>
-            <button id="btnImportYoutube" class="btn btn-accent">⬇ Download &amp; Import</button>
+            <button id="btnImportYoutube" class="btn btn-accent">⬇ Import</button>
           </div>
         </div>
       </div>
 
-      <!-- TAB 4: SOURCES, DRIFT SYNC & GEMINI AI DIRECTOR -->
+      <!-- TAB 4: SETTINGS -->
       <div id="tabPane_settings" class="fio-tab-pane">
         <div class="settings-group">
-          <div class="settings-title">Drift-Compensated Audio Sync <span id="syncStateBadge" class="badge badge-synced">99.8% Synced</span></div>
+          <div class="settings-title">Audio Sync <span id="syncStateBadge" class="badge badge-synced">Synced</span></div>
           <div class="sync-metrics-grid">
             <div class="metric-box">
               <span class="metric-label">Track B Offset</span>
-              <span id="syncOffsetValue" class="metric-val">+294.15s</span>
+              <span id="syncOffsetValue" class="metric-val">+0.000s</span>
             </div>
             <div class="metric-box">
               <span class="metric-label">Frame Offset</span>
-              <span id="syncFramesValue" class="metric-val">+8825f</span>
+              <span id="syncFramesValue" class="metric-val">+0f</span>
             </div>
             <div class="metric-box">
               <span class="metric-label">Confidence</span>
-              <span id="syncConfidenceValue" class="metric-val">99.8%</span>
+              <span id="syncConfidenceValue" class="metric-val">—</span>
             </div>
           </div>
           <button id="btnAutoSync" class="btn btn-outline btn-block">🔄 Re-Run Audio Cross-Correlation</button>
@@ -510,10 +506,10 @@
         <div class="settings-group">
           <div class="settings-title">Source Perspectives</div>
           <div class="track-source-mini">
-            <input id="playerAName" class="track-name-input" type="text" value="Matthew (POV A)" />
-            <div id="trackAMeta" class="track-meta">2026-11-03 18-13-38.mp4</div>
+            <input id="playerAName" class="track-name-input" type="text" value="Player A" />
+            <div id="trackAMeta" class="track-meta">No video loaded</div>
             <div class="path-load-row">
-              <input id="pathInputA" type="text" class="text-input input-sm" value="C:\Users\mbowe\Downloads\Videos\2026-11-03 18-13-38.mp4" />
+              <input id="pathInputA" type="text" class="text-input input-sm" placeholder="Path to POV A video..." />
               <button id="btnLoadPathA" class="btn btn-xs btn-outline">Load</button>
               <label class="btn btn-xs btn-outline">File<input id="fileInputA" type="file" accept="video/*" hidden /></label>
             </div>
@@ -521,10 +517,10 @@
           </div>
 
           <div class="track-source-mini" style="margin-top:8px;">
-            <input id="playerBName" class="track-name-input" type="text" value="Leelai (POV B)" />
-            <div id="trackBMeta" class="track-meta">2026-11-03 18-18-32.mp4</div>
+            <input id="playerBName" class="track-name-input" type="text" value="Player B" />
+            <div id="trackBMeta" class="track-meta">No video loaded</div>
             <div class="path-load-row">
-              <input id="pathInputB" type="text" class="text-input input-sm" value="C:\Users\mbowe\Downloads\Videos\2026-11-03 18-18-32.mp4" />
+              <input id="pathInputB" type="text" class="text-input input-sm" placeholder="Path to POV B video..." />
               <button id="btnLoadPathB" class="btn btn-xs btn-outline">Load</button>
               <label class="btn btn-xs btn-outline">File<input id="fileInputB" type="file" accept="video/*" hidden /></label>
             </div>
@@ -533,22 +529,30 @@
         </div>
 
         <div class="settings-group">
-          <div class="settings-title">Gemini AI Director (Your Quota)</div>
-          <input id="geminiApiKey" type="password" class="text-input input-sm" placeholder="AIzaSy... Gemini API Key" autocomplete="off" style="margin-bottom:6px;" />
+          <div class="settings-title">Gemini AI Director</div>
+          <input id="geminiApiKey" type="password" class="text-input input-sm" placeholder="Gemini API Key" autocomplete="off" style="margin-bottom:6px;" />
           <select id="geminiModel" class="select-input" style="margin-bottom:6px;">
             <option value="gemini-2.5-flash" selected>gemini-2.5-flash</option>
             <option value="gemini-2.5-pro">gemini-2.5-pro</option>
           </select>
-          <input id="gameNameInput" type="text" class="text-input input-sm" value="Minecraft 2-Hour Co-Op Challenge" style="margin-bottom:6px;" />
+          <input id="gameNameInput" type="text" class="text-input input-sm" value="" placeholder="Game/Session Name" style="margin-bottom:6px;" />
           <select id="povPacingSelect" class="select-input" style="margin-bottom:6px;">
-            <option value="dynamic" selected>Dynamic Co-Op Cuts (Ludwig Style)</option>
+            <option value="dynamic" selected>Dynamic Co-Op Cuts</option>
             <option value="fast">Fast Action Cuts</option>
             <option value="relaxed">Relaxed Story Cuts</option>
           </select>
-          <textarea id="stylePromptInput" class="textarea-input" rows="2">Cut like Ludwig &amp; CDawgVA's Hardest Gaming Challenge: use 50/50 full-height splits for co-op banter and shared reactions, and fast single-POV cuts with corner PiP during intense combat.</textarea>
+          <textarea id="stylePromptInput" class="textarea-input" rows="2" placeholder="Describe your editing style..."></textarea>
           <button id="btnAnalyzeGemini" class="btn btn-accent btn-block" style="margin-top:6px;">✨ Re-Cut with Gemini AI</button>
-          <div id="analysisSourceCaption" class="analysis-caption">Active: 21-Scene Co-Op Story Edit</div>
-          <button id="btnLoadDemo" class="btn btn-ghost btn-xs btn-block" style="margin-top:8px;">Switch to 30s Demo Clips</button>
+          <div id="analysisSourceCaption" class="analysis-caption"></div>
+          <button id="btnLoadDemo" class="btn btn-ghost btn-xs btn-block" style="margin-top:8px;">Load Demo Clips</button>
+        </div>
+
+        <!-- SAVE SNAPSHOTS -->
+        <div class="settings-group">
+          <div class="settings-title">Save Snapshots</div>
+          <div id="snapshotsList" class="snapshots-list">
+            <div class="empty-state">No snapshots yet.</div>
+          </div>
         </div>
       </div>
     </aside>
