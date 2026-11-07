@@ -1920,3 +1920,143 @@ body {
   display: flex;
   gap: 6px;
 }
+
+/* =========================================================================
+   VIDEO PLAYBACK, QUALITY & SMOOTHNESS TUNER POPOVER
+   ========================================================================= */
+.btn-playback-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(16, 185, 129, 0.16);
+  border: 1px solid rgba(52, 211, 153, 0.45);
+  color: #d1fae5;
+  font-weight: 700;
+}
+.btn-playback-pill:hover,
+.btn-playback-pill.active {
+  background: rgba(16, 185, 129, 0.32);
+  border-color: #34d399;
+  color: #fff;
+}
+.playback-pill-badge {
+  background: rgba(6, 78, 59, 0.85);
+  color: #6ee7b7;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.fio-playback-tuner-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 7px 12px;
+  background: linear-gradient(90deg, #0d1624 0%, #111b2d 50%, #0d1624 100%);
+  border-bottom: 1px solid rgba(52, 211, 153, 0.35);
+  flex-shrink: 0;
+}
+.fio-playback-tuner-bar.hidden {
+  display: none !important;
+}
+
+.tuner-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(51, 65, 85, 0.75);
+  padding: 3px 8px;
+  border-radius: 7px;
+}
+
+.tuner-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.tuner-pill-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.tuner-pill {
+  background: #161f33;
+  color: #cbd5e1;
+  border: 1px solid #293548;
+  border-radius: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.tuner-pill:hover {
+  background: #1e293b;
+  color: #fff;
+}
+.tuner-pill.active {
+  background: #10b981;
+  color: #052e16;
+  border-color: #34d399;
+  font-weight: 800;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+}
+
+.tuner-select {
+  background: #0b101d;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  border-radius: 5px;
+  padding: 2px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  outline: none;
+}
+
+.tuner-slider {
+  width: 72px;
+  accent-color: #10b981;
+  cursor: pointer;
+}
+
+.tuner-val {
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #6ee7b7;
+  min-width: 34px;
+}
+
+.tuner-telemetry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.telem-chip {
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid #334155;
+  color: #cbd5e1;
+}
+.telem-chip.telem-ok {
+  border-color: rgba(52, 211, 153, 0.45);
+  color: #6ee7b7;
+}
+.telem-chip.telem-warn {
+  border-color: rgba(251, 191, 36, 0.55);
+  color: #fde68a;
+}

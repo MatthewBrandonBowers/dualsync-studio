@@ -202,12 +202,16 @@
           </label>
         </div>
 
-        <!-- RIGHT: EDIT ACTIONS & POPOVER AUDIO MIXER -->
+        <!-- RIGHT: EDIT ACTIONS, VIDEO QUALITY TUNER & POPOVER AUDIO MIXER -->
         <div class="framing-cluster">
           <button id="btnSplitCut" class="btn btn-ghost btn-xs" title="Split camera cut at playhead (Key: S)">✂️ Split (S)</button>
           <button id="btnDeleteCut" class="btn btn-ghost btn-xs" title="Merge/remove current camera cut (Key: Backspace)">🗑️ Merge Cut</button>
           <button id="btnAddHighlightHere" class="btn btn-ghost btn-xs" title="Bookmark new scene at playhead (Key: H)">➕ New Scene</button>
           <button id="btnCyclePov" class="btn btn-ghost btn-xs hidden" title="Cycle POV (V)">🎥</button>
+          <button id="btnTogglePlaybackPopover" class="btn btn-playback-pill btn-xs" title="Adjust Video Quality, Smooth Sync Engine, Playback Speed &amp; Stream Server">
+            ⚙️ Video Playback
+            <span id="playbackQualityBadge" class="playback-pill-badge">540p Smooth</span>
+          </button>
           <button id="btnToggleVoiceMixer" class="btn btn-mixer-pill btn-xs" title="Open 4-Stem Separated Audio Mixer Drawer">
             🎚️ 4-Stem Audio
             <span class="mini-vu-pair">
@@ -216,6 +220,63 @@
             </span>
           </button>
           <button id="btnToggleTimelineDrawer" class="btn btn-ghost btn-xs" title="Show/Hide Timeline">📐 Timeline</button>
+        </div>
+      </div>
+
+      <!-- VIDEO PLAYBACK, QUALITY & SMOOTHNESS TUNER POPOVER -->
+      <div id="playbackSettingsPopover" class="fio-playback-tuner-bar hidden">
+        <div class="tuner-group">
+          <span class="tuner-label">🎬 Video Quality:</span>
+          <div class="tuner-pill-row" id="qualityPillRow">
+            <button type="button" class="tuner-pill" data-quality="1080p" title="Original 1080p60 OBS Source Recording (Highest Bitrate)">🔥 1080p60 Raw</button>
+            <button type="button" class="tuner-pill" data-quality="720p" title="1280x720 @ 30fps HD Proxy (1.6 GB)">💎 720p HD</button>
+            <button type="button" class="tuner-pill active" data-quality="540p" title="960x540 @ 30fps Smooth Proxy (350 MB — Best Balance of Sharpness &amp; Zero-Lag Dual-POV)">🚀 540p Smooth</button>
+            <button type="button" class="tuner-pill" data-quality="360p" title="640x360 @ 30fps Ultra-Light Stream (80 MB — Instant on Slow Wi-Fi)">⚡ 360p Fast</button>
+          </div>
+        </div>
+
+        <div class="tuner-group">
+          <span class="tuner-label">🧠 Smoothness Mode:</span>
+          <select id="selectSyncEngineMode" class="tuner-select" title="Choose how the dual video decoders are synchronized">
+            <option value="free_run" selected>🧈 Butter-Smooth (Free-Run 1.0x Clock — Zero Frame Jitter)</option>
+            <option value="single_decoder">⚡ Turbo Single-Decoder (Pause Hidden POV — 2x Faster GPU)</option>
+            <option value="gentle_lock">🎯 Gentle 1Hz Micro-Sync (Tight A/B Lock)</option>
+          </select>
+        </div>
+
+        <div class="tuner-group">
+          <span class="tuner-label">🎚️ Drift Tolerance:</span>
+          <input id="sliderDriftTolerance" type="range" min="0.15" max="2.00" step="0.05" value="0.55" class="tuner-slider" title="How much A/B drift is allowed before re-seeking during playback (higher = fewer seek hitches)" />
+          <span id="labelDriftTolerance" class="tuner-val">0.55s</span>
+        </div>
+
+        <div class="tuner-group">
+          <span class="tuner-label">⏩ Speed:</span>
+          <div class="tuner-pill-row" id="speedPillRow">
+            <button type="button" class="tuner-pill" data-speed="0.5">0.5x</button>
+            <button type="button" class="tuner-pill" data-speed="0.75">0.75x</button>
+            <button type="button" class="tuner-pill active" data-speed="1">1.0x</button>
+            <button type="button" class="tuner-pill" data-speed="1.25">1.25x</button>
+            <button type="button" class="tuner-pill" data-speed="1.5">1.5x</button>
+            <button type="button" class="tuner-pill" data-speed="2">2.0x</button>
+          </div>
+        </div>
+
+        <div class="tuner-group">
+          <span class="tuner-label">📡 Server:</span>
+          <select id="selectStreamSource" class="tuner-select" title="Choose where video streams are loaded from">
+            <option value="auto" selected>⚡ Auto-Best (Local SSD → Live HD Tunnel → Cloud CDN)</option>
+            <option value="local">💻 Local SSD (127.0.0.1:8765)</option>
+            <option value="tunnel">🌐 Live Cloudflare HD Tunnel</option>
+            <option value="cloud">☁️ GitHub Pages CDN (360p30 Offline)</option>
+          </select>
+        </div>
+
+        <div class="tuner-telemetry">
+          <span id="telemetryFpsBadge" class="telem-chip telem-ok">60 FPS</span>
+          <span id="telemetryDriftBadge" class="telem-chip">Drift: 0.01s</span>
+          <span id="telemetryBufferBadge" class="telem-chip">Buffer: Ready</span>
+          <button id="btnForceResyncNow" type="button" class="btn btn-ghost btn-xxs" title="Immediately lock both video tracks and audio stems to the exact playhead">🔄 Re-Sync Now</button>
         </div>
       </div>
 

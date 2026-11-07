@@ -364,6 +364,8 @@ function updateFrameioScrubberPosition(t) {
 }
 
 let lastRenderedSceneIdx = -1;
+let lastUiSceneIdx = -1;
+let lastUiPov = "";
 let timelineMode = "scene"; // "scene" (Focused Scene Trim with Draggable Handles) or "full" (Full 2h Map)
 let lockedTimelineWindow = null; // Locked [winStart, winEnd] while dragging a trim handle
 
@@ -371,54 +373,64 @@ function updateDirectorViewportUI(t) {
   const info = getNearestOrCurrentHighlight(t);
   const activeInfo = getActiveCutAtTime(t);
   const pov = activeInfo ? activeInfo.cut.active_pov : "A";
-  const showPip = document.getElementById("chkShowPip")?.checked !== false;
+  const showPip =
+    syncEngineMode === "single_decoder"
+      ? false
+      : document.getElementById("chkShowPip")?.checked !== false;
 
-  el.monitorsContainer.classList.toggle("show-pip", showPip);
-  el.monitorsContainer.classList.remove("split-mode");
-  el.viewportA.classList.remove("active-pov", "pip-mate");
-  el.viewportB.classList.remove("active-pov", "pip-mate");
+  const povKey = `${pov}_${showPip ? 1 : 0}`;
+  if (povKey !== lastUiPov) {
+    lastUiPov = povKey;
+    el.monitorsContainer.classList.toggle("show-pip", showPip);
+    el.monitorsContainer.classList.remove("split-mode");
+    el.viewportA.classList.remove("active-pov", "pip-mate");
+    el.viewportB.classList.remove("active-pov", "pip-mate");
 
-  if (pov === "A") {
-    el.viewportA.classList.add("active-pov");
-    el.viewportB.classList.add("pip-mate");
-    el.liveDirectorBadge.textContent = showPip
-      ? `🟦 MATTHEW MAIN + LEELAI PIP`
-      : `🟦 MATTHEW POV`;
-  } else if (pov === "B") {
-    el.viewportB.classList.add("active-pov");
-    el.viewportA.classList.add("pip-mate");
-    el.liveDirectorBadge.textContent = showPip
-      ? `🟪 LEELAI MAIN + MATTHEW PIP`
-      : `🟪 LEELAI POV`;
-  } else {
-    el.monitorsContainer.classList.add("split-mode");
-    el.liveDirectorBadge.textContent = "🔥 50/50 CO-OP SPLIT (MATTHEW + LEELAI)";
+    if (pov === "A") {
+      el.viewportA.classList.add("active-pov");
+      el.viewportB.classList.add("pip-mate");
+      el.liveDirectorBadge.textContent = showPip
+        ? `🟦 MATTHEW MAIN + LEELAI PIP`
+        : `🟦 MATTHEW POV`;
+    } else if (pov === "B") {
+      el.viewportB.classList.add("active-pov");
+      el.viewportA.classList.add("pip-mate");
+      el.liveDirectorBadge.textContent = showPip
+        ? `🟪 LEELAI MAIN + MATTHEW PIP`
+        : `🟪 LEELAI POV`;
+    } else {
+      el.monitorsContainer.classList.add("split-mode");
+      el.liveDirectorBadge.textContent = "🔥 50/50 CO-OP SPLIT (MATTHEW + LEELAI)";
+    }
+
+    // Update Live Broadcast Camera Switcher Deck tally lights
+    document.getElementById("btnSwitchPovA")?.classList.toggle("tally-active", pov === "A");
+    document.getElementById("btnSwitchPovSplit")?.classList.toggle("tally-active", pov === "SPLIT");
+    document.getElementById("btnSwitchPovB")?.classList.toggle("tally-active", pov === "B");
   }
-
-  // Update Live Broadcast Camera Switcher Deck tally lights
-  document.getElementById("btnSwitchPovA")?.classList.toggle("tally-active", pov === "A");
-  document.getElementById("btnSwitchPovSplit")?.classList.toggle("tally-active", pov === "SPLIT");
-  document.getElementById("btnSwitchPovB")?.classList.toggle("tally-active", pov === "B");
 
   updateLudwigHudAtTime(t);
   updateFrameioScrubberPosition(t);
 
   if (info && info.highlight) {
     const hl = info.highlight;
-    const totalScenes = projectState.highlights.length;
-    const num = hl.scene_number || info.highlightIndex + 1;
-    el.activeSceneBadge.textContent = activeInfo ? `SCENE ${num} / ${totalScenes}` : `SCENE ${num}`;
-    el.activeSceneTitle.textContent = hl.title;
-    el.activeSceneAct.textContent = hl.act || "Story Scene";
-    const dur = (hl.end_sec - hl.start_sec).toFixed(1);
-    el.activeSceneRangeLabel.textContent = `${dur}s`;
+    if (info.highlightIndex !== lastUiSceneIdx) {
+      lastUiSceneIdx = info.highlightIndex;
+      const totalScenes = projectState.highlights.length;
+      const num = hl.scene_number || info.highlightIndex + 1;
+      el.activeSceneBadge.textContent = activeInfo ? `SCENE ${num} / ${totalScenes}` : `SCENE ${num}`;
+      el.activeSceneTitle.textContent = hl.title;
+      el.activeSceneAct.textContent = hl.act || "Story Scene";
+      const dur = (hl.end_sec - hl.start_sec).toFixed(1);
+      el.activeSceneRangeLabel.textContent = `${dur}s`;
 
-    document.querySelectorAll(".chapter-pill").forEach((p) => {
-      p.classList.toggle("active", parseInt(p.getAttribute("data-hl-idx"), 10) === info.highlightIndex);
-    });
-    document.querySelectorAll(".highlight-card").forEach((c) => {
-      c.classList.toggle("active-scene", parseInt(c.getAttribute("data-hl-card"), 10) === info.highlightIndex);
-    });
+      document.querySelectorAll(".chapter-pill").forEach((p) => {
+        p.classList.toggle("active", parseInt(p.getAttribute("data-hl-idx"), 10) === info.highlightIndex);
+      });
+      document.querySelectorAll(".highlight-card").forEach((c) => {
+        c.classList.toggle("active-scene", parseInt(c.getAttribute("data-hl-card"), 10) === info.highlightIndex);
+      });
+    }
 
     if (timelineMode === "scene" && !lockedTimelineWindow && info.highlightIndex !== lastRenderedSceneIdx) {
       lastRenderedSceneIdx = info.highlightIndex;
@@ -459,6 +471,29 @@ let activeActFilter = "ALL";
 let lastHardSeekMsA = 0;
 let lastHardSeekMsB = 0;
 let lastHardSeekMsAudio = 0;
+let lastRateNudgeMsA = 0;
+let lastRateNudgeMsB = 0;
+
+// User-Adjustable Video Playback & Quality Tuner State
+let currentVideoQuality = localStorage.getItem("dualsync_video_quality") || "540p";
+let syncEngineMode = localStorage.getItem("dualsync_sync_engine") || "free_run"; // "free_run" | "single_decoder" | "gentle_lock"
+let driftToleranceSec = parseFloat(localStorage.getItem("dualsync_drift_tol") || "0.55");
+let userPlaybackSpeed = 1.0;
+let streamSourceMode = localStorage.getItem("dualsync_stream_source") || "auto"; // "auto" | "local" | "tunnel" | "cloud"
+let resolvedBackendBaseUrl = ""; // "" (same-origin), "http://127.0.0.1:8765", tunnel URL, or "CLOUD"
+
+// Cached WebAudio gains to avoid 60fps AudioParam automation queue spam
+let lastGainM = -1;
+let lastGainL = -1;
+let lastGainDM = -1;
+let lastGainDL = -1;
+let lastMixerStateSignature = "";
+
+// FPS & Telemetry state
+let fpsFrameCount = 0;
+let fpsLastSampleMs = performance.now();
+let measuredFps = 60;
+let lastTelemetryUpdateMs = 0;
 
 function initWebAudioVoiceMixer() {
   if (voiceMixerInitialized) {
@@ -575,18 +610,26 @@ function applyVoiceMixerGains(t = masterTime) {
   const dMattGain = mattDeskMuted || el.muteA?.checked ? 0.0 : volDeskMattPct / 100.0;
   const dLeeGain = leeDeskMuted || el.muteB?.checked ? 0.0 : volDeskLeePct / 100.0;
 
-  if (mattGainNode && audioCtx) {
+  if (mattGainNode && audioCtx && Math.abs(mGain - lastGainM) > 0.002) {
+    lastGainM = mGain;
     mattGainNode.gain.setTargetAtTime(mGain, audioCtx.currentTime, 0.025);
   }
-  if (leeGainNode && audioCtx) {
+  if (leeGainNode && audioCtx && Math.abs(lGain - lastGainL) > 0.002) {
+    lastGainL = lGain;
     leeGainNode.gain.setTargetAtTime(lGain, audioCtx.currentTime, 0.025);
   }
-  if (mattDeskGainNode && audioCtx) {
+  if (mattDeskGainNode && audioCtx && Math.abs(dMattGain - lastGainDM) > 0.002) {
+    lastGainDM = dMattGain;
     mattDeskGainNode.gain.setTargetAtTime(dMattGain, audioCtx.currentTime, 0.025);
   }
-  if (leeDeskGainNode && audioCtx) {
+  if (leeDeskGainNode && audioCtx && Math.abs(dLeeGain - lastGainDL) > 0.002) {
+    lastGainDL = dLeeGain;
     leeDeskGainNode.gain.setTargetAtTime(dLeeGain, audioCtx.currentTime, 0.025);
   }
+
+  const sig = `${owner}_${mattVoiceMuted}_${leeVoiceMuted}_${mattDeskMuted}_${leeDeskMuted}_${volMattPct}_${volLeePct}_${volDeskMattPct}_${volDeskLeePct}_${autoMuteMode}`;
+  if (sig === lastMixerStateSignature) return;
+  lastMixerStateSignature = sig;
 
   const lblM = document.getElementById("labelVolMatt");
   const lblL = document.getElementById("labelVolLee");
@@ -675,10 +718,11 @@ function syncSingleVideoElement(videoEl, targetSec, clipDurSec, forceSeek, slot)
   const lastSeekMs = slot === "A" ? lastHardSeekMsA : lastHardSeekMsB;
   const err = clamped - videoEl.currentTime;
   const absErr = Math.abs(err);
+  const baseRate = userPlaybackSpeed || 1.0;
 
   if (forceSeek) {
-    if (videoEl.playbackRate !== 1.0) videoEl.playbackRate = 1.0;
-    if (absErr > 0.03 && (!videoEl.seeking || nowMs - lastSeekMs > 180)) {
+    if (Math.abs(videoEl.playbackRate - baseRate) > 0.01) videoEl.playbackRate = baseRate;
+    if (absErr > 0.04 && (!videoEl.seeking || nowMs - lastSeekMs > 220)) {
       videoEl.currentTime = clamped;
       if (slot === "A") lastHardSeekMsA = nowMs;
       else lastHardSeekMsB = nowMs;
@@ -687,25 +731,77 @@ function syncSingleVideoElement(videoEl, targetSec, clipDurSec, forceSeek, slot)
   }
 
   if (isPlaying) {
-    // Anti-thrash: never spam currentTime during continuous playback unless drift > 0.65s!
-    if (absErr > 0.65 && !videoEl.seeking && nowMs - lastSeekMs > 550) {
-      videoEl.playbackRate = 1.0;
+    const tol = Math.max(0.15, driftToleranceSec || 0.55);
+    if (absErr > tol && !videoEl.seeking && nowMs - lastSeekMs > 950) {
+      if (Math.abs(videoEl.playbackRate - baseRate) > 0.01) videoEl.playbackRate = baseRate;
       videoEl.currentTime = clamped;
       if (slot === "A") lastHardSeekMsA = nowMs;
       else lastHardSeekMsB = nowMs;
-    } else if (absErr > 0.045) {
-      // Smooth micro-sync via playbackRate (0.94x .. 1.06x) — zero decoder stalls!
-      const desiredRate = Math.max(0.94, Math.min(1.06, 1.0 + err * 0.35));
-      if (Math.abs(videoEl.playbackRate - desiredRate) > 0.008) {
-        videoEl.playbackRate = desiredRate;
+    } else if (syncEngineMode === "gentle_lock") {
+      // Only nudge playbackRate at most once every 1000ms to prevent Chromium frame drops
+      const lastNudge = slot === "A" ? lastRateNudgeMsA : lastRateNudgeMsB;
+      if (nowMs - lastNudge > 1000) {
+        if (slot === "A") lastRateNudgeMsA = nowMs;
+        else lastRateNudgeMsB = nowMs;
+        const desiredRate =
+          absErr > 0.09
+            ? Math.max(baseRate * 0.97, Math.min(baseRate * 1.03, baseRate + err * 0.18))
+            : baseRate;
+        if (Math.abs(videoEl.playbackRate - desiredRate) > 0.01) {
+          videoEl.playbackRate = desiredRate;
+        }
       }
-    } else if (Math.abs(videoEl.playbackRate - 1.0) > 0.005) {
-      videoEl.playbackRate = 1.0;
+    } else {
+      // "free_run" or "single_decoder": keep hardware decoder at pure constant baseRate — zero stutter!
+      if (Math.abs(videoEl.playbackRate - baseRate) > 0.01) {
+        videoEl.playbackRate = baseRate;
+      }
     }
   } else {
     if (absErr > 0.05 && !videoEl.seeking) {
       videoEl.currentTime = clamped;
     }
+  }
+}
+
+function updatePlaybackTelemetry(timeA, timeB) {
+  fpsFrameCount++;
+  const nowMs = performance.now();
+  if (nowMs - fpsLastSampleMs >= 500) {
+    measuredFps = Math.min(60, Math.round((fpsFrameCount * 1000) / (nowMs - fpsLastSampleMs)));
+    fpsFrameCount = 0;
+    fpsLastSampleMs = nowMs;
+  }
+  if (nowMs - lastTelemetryUpdateMs < 350) return;
+  lastTelemetryUpdateMs = nowMs;
+
+  const fpsEl = document.getElementById("telemetryFpsBadge");
+  const driftEl = document.getElementById("telemetryDriftBadge");
+  const bufEl = document.getElementById("telemetryBufferBadge");
+  if (fpsEl) {
+    fpsEl.textContent = isPlaying ? `${measuredFps} FPS` : "60 FPS (Idle)";
+    fpsEl.classList.toggle("telem-ok", !isPlaying || measuredFps >= 26);
+    fpsEl.classList.toggle("telem-warn", isPlaying && measuredFps < 26);
+  }
+  if (driftEl && el.videoA && el.videoB) {
+    const dA = Math.abs((timeA || 0) - (el.videoA.currentTime || 0));
+    const dB = timeB >= 0 ? Math.abs(timeB - (el.videoB.currentTime || 0)) : 0;
+    const maxDrift = Math.max(dA, dB);
+    driftEl.textContent = `Drift: ${(maxDrift * 1000).toFixed(0)}ms`;
+  }
+  if (bufEl && el.videoA) {
+    let ahead = 0;
+    try {
+      const b = el.videoA.buffered;
+      const cur = el.videoA.currentTime;
+      for (let i = 0; i < b.length; i++) {
+        if (b.start(i) <= cur + 0.5 && b.end(i) >= cur) {
+          ahead = Math.max(0, b.end(i) - cur);
+          break;
+        }
+      }
+    } catch (_) {}
+    bufEl.textContent = `Buffer: ${ahead.toFixed(1)}s`;
   }
 }
 
@@ -721,10 +817,9 @@ function syncVideosToMasterTime(t, forceSeek = false) {
   el.localTcA.textContent = formatTime(timeA);
   el.localTcB.textContent = timeB >= 0 ? formatTime(timeB) : `WAIT (${timeB.toFixed(1)}s)`;
 
-  const sign = offset >= 0 ? "+" : "";
-  el.syncOffsetValue.textContent = `${sign}${offset.toFixed(3)}s`;
-  const fps = projectState?.track_a?.fps || 30.0;
-  el.syncFramesValue.textContent = `+${Math.round(offset * fps)} f`;
+  const activeInfo = getActiveCutAtTime(masterTime);
+  const activePov = activeInfo ? activeInfo.cut.active_pov : "A";
+  const singleDecoderActive = syncEngineMode === "single_decoder" && isPlaying && !forceSeek;
 
   const ma = document.getElementById("masterAudio");
   const da = document.getElementById("desktopAudio");
@@ -733,7 +828,12 @@ function syncVideosToMasterTime(t, forceSeek = false) {
     el.videoA.muted = true;
     el.videoB.muted = true;
     const nowMs = performance.now();
-    if (forceSeek || (!isPlaying && Math.abs(ma.currentTime - timeA) > 0.08) || (isPlaying && Math.abs(ma.currentTime - timeA) > 0.45 && nowMs - lastHardSeekMsAudio > 500)) {
+    const tol = Math.max(0.25, driftToleranceSec || 0.55);
+    if (
+      forceSeek ||
+      (!isPlaying && Math.abs(ma.currentTime - timeA) > 0.08) ||
+      (isPlaying && Math.abs(ma.currentTime - timeA) > tol && nowMs - lastHardSeekMsAudio > 850)
+    ) {
       if (!ma.seeking || forceSeek) {
         try {
           ma.currentTime = Math.max(0, Math.min(ma.duration || totalDur, timeA));
@@ -741,9 +841,10 @@ function syncVideosToMasterTime(t, forceSeek = false) {
           lastHardSeekMsAudio = nowMs;
         } catch (_) {}
       }
-    } else if (da && Math.abs(da.currentTime - ma.currentTime) > 0.09 && !da.seeking) {
+    } else if (da && Math.abs(da.currentTime - ma.currentTime) > 0.35 && !da.seeking && nowMs - lastHardSeekMsAudio > 1400) {
       try {
         da.currentTime = ma.currentTime;
+        lastHardSeekMsAudio = nowMs;
       } catch (_) {}
     }
   } else {
@@ -752,15 +853,28 @@ function syncVideosToMasterTime(t, forceSeek = false) {
   }
 
   if (projectState?.track_a) {
-    syncSingleVideoElement(el.videoA, timeA, projectState.track_a.duration_sec, forceSeek, "A");
+    if (singleDecoderActive && activePov === "B") {
+      if (!el.videoA.paused) el.videoA.pause();
+    } else {
+      if (isPlaying && el.videoA.paused) {
+        syncSingleVideoElement(el.videoA, timeA, projectState.track_a.duration_sec, true, "A");
+        el.videoA.play().catch(() => {});
+      } else {
+        syncSingleVideoElement(el.videoA, timeA, projectState.track_a.duration_sec, forceSeek, "A");
+      }
+    }
   }
 
   if (projectState?.track_b) {
     const durB = projectState.track_b.duration_sec;
     if (timeB >= 0 && timeB <= durB) {
-      syncSingleVideoElement(el.videoB, timeB, durB, forceSeek, "B");
-      if (isPlaying && el.videoB.paused) {
-        el.videoB.play().catch(() => {});
+      if (singleDecoderActive && activePov === "A") {
+        if (!el.videoB.paused) el.videoB.pause();
+      } else {
+        syncSingleVideoElement(el.videoB, timeB, durB, forceSeek, "B");
+        if (isPlaying && el.videoB.paused) {
+          el.videoB.play().catch(() => {});
+        }
       }
     } else {
       if (!el.videoB.paused) el.videoB.pause();
@@ -770,6 +884,7 @@ function syncVideosToMasterTime(t, forceSeek = false) {
   updateVoiceVuMeters(masterTime);
   updatePlayheadPosition();
   updateDirectorViewportUI(masterTime);
+  updatePlaybackTelemetry(timeA, timeB);
 }
 
 function tickPlayback() {
@@ -828,12 +943,15 @@ function startPlayback() {
     }
   }
 
+  const baseRate = userPlaybackSpeed || 1.0;
   const ma = document.getElementById("masterAudio");
   const da = document.getElementById("desktopAudio");
   if (hasMasterCoopAudio() && ma) {
     el.videoA.muted = true;
     el.videoB.muted = true;
     try {
+      ma.playbackRate = baseRate;
+      if (da) da.playbackRate = baseRate;
       ma.currentTime = masterTime;
       if (da) da.currentTime = masterTime;
     } catch (_) {}
@@ -843,6 +961,8 @@ function startPlayback() {
     el.videoB.muted = true;
   }
 
+  el.videoA.playbackRate = baseRate;
+  el.videoB.playbackRate = baseRate;
   el.videoA.play().catch(() => {});
   const timeB = masterTime - getEffectiveOffsetAtTime(masterTime);
   if (projectState?.track_b && timeB >= 0 && timeB <= projectState.track_b.duration_sec) {
@@ -862,8 +982,9 @@ function pausePlayback() {
   if (da) da.pause();
   el.videoA.pause();
   el.videoB.pause();
-  el.videoA.playbackRate = 1.0;
-  el.videoB.playbackRate = 1.0;
+  const baseRate = userPlaybackSpeed || 1.0;
+  el.videoA.playbackRate = baseRate;
+  el.videoB.playbackRate = baseRate;
   cancelAnimationFrame(rafId);
 }
 
@@ -2547,8 +2668,226 @@ document.getElementById("btnImportYoutube")?.addEventListener("click", async () 
   }
 });
 
+// =========================================================================
+// VIDEO PLAYBACK, QUALITY & SMOOTHNESS TUNER
+// =========================================================================
+let cachedTunnelUrl = "https://plus-macintosh-breeds-graphic.trycloudflare.com";
+
+async function fetchWithTimeout(url, timeoutMs = 1500) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal, cache: "no-store" });
+    clearTimeout(id);
+    return r;
+  } catch (e) {
+    clearTimeout(id);
+    throw e;
+  }
+}
+
+async function detectBestBackendServer() {
+  try {
+    const lbResp = await fetch(`./live_backend.json?v=${Date.now()}`);
+    if (lbResp.ok) {
+      const lb = await lbResp.json();
+      if (lb.backend_url) cachedTunnelUrl = lb.backend_url.replace(/\/+$/, "");
+    }
+  } catch (_) {}
+
+  if (streamSourceMode === "cloud") {
+    resolvedBackendBaseUrl = "CLOUD";
+    return resolvedBackendBaseUrl;
+  }
+  if (streamSourceMode === "local") {
+    resolvedBackendBaseUrl = IS_STATIC_CLOUD ? "http://127.0.0.1:8765" : "";
+    return resolvedBackendBaseUrl;
+  }
+  if (streamSourceMode === "tunnel") {
+    resolvedBackendBaseUrl = IS_STATIC_CLOUD ? cachedTunnelUrl : "";
+    return resolvedBackendBaseUrl;
+  }
+
+  // "auto" mode
+  if (!IS_STATIC_CLOUD) {
+    resolvedBackendBaseUrl = "";
+    return resolvedBackendBaseUrl;
+  }
+
+  // When running on GitHub Pages (IS_STATIC_CLOUD), probe local SSD server first, then live Cloudflare tunnel!
+  try {
+    const rLocal = await fetchWithTimeout("http://127.0.0.1:8765/api/health", 1100);
+    if (rLocal.ok) {
+      resolvedBackendBaseUrl = "http://127.0.0.1:8765";
+      return resolvedBackendBaseUrl;
+    }
+  } catch (_) {}
+
+  if (cachedTunnelUrl) {
+    try {
+      const rTun = await fetchWithTimeout(`${cachedTunnelUrl}/api/health`, 2200);
+      if (rTun.ok) {
+        resolvedBackendBaseUrl = cachedTunnelUrl;
+        return resolvedBackendBaseUrl;
+      }
+    } catch (_) {}
+  }
+
+  resolvedBackendBaseUrl = "CLOUD";
+  return resolvedBackendBaseUrl;
+}
+
+function getQualityBadgeLabel(q, base) {
+  if (base === "CLOUD") return "360p Cloud";
+  if (q === "1080p") return "1080p60 Raw";
+  if (q === "720p") return "720p HD";
+  if (q === "360p") return "360p Fast";
+  return "540p Smooth";
+}
+
+function updatePlaybackTunerBadges() {
+  const badge = document.getElementById("playbackQualityBadge");
+  const speedSuffix = userPlaybackSpeed !== 1.0 ? ` · ${userPlaybackSpeed}x` : "";
+  if (badge) {
+    badge.textContent = `${getQualityBadgeLabel(currentVideoQuality, resolvedBackendBaseUrl)}${speedSuffix}`;
+  }
+
+  document.querySelectorAll("#qualityPillRow .tuner-pill").forEach((btn) => {
+    btn.classList.toggle("active", btn.getAttribute("data-quality") === currentVideoQuality);
+  });
+  document.querySelectorAll("#speedPillRow .tuner-pill").forEach((btn) => {
+    btn.classList.toggle("active", parseFloat(btn.getAttribute("data-speed")) === userPlaybackSpeed);
+  });
+
+  const selSync = document.getElementById("selectSyncEngineMode");
+  if (selSync) selSync.value = syncEngineMode;
+
+  const selSrv = document.getElementById("selectStreamSource");
+  if (selSrv) selSrv.value = streamSourceMode;
+
+  const sldTol = document.getElementById("sliderDriftTolerance");
+  const lblTol = document.getElementById("labelDriftTolerance");
+  if (sldTol) sldTol.value = String(driftToleranceSec);
+  if (lblTol) lblTol.textContent = `${driftToleranceSec.toFixed(2)}s`;
+}
+
+async function applyMediaStreamSettings(preservePlayhead = true) {
+  const wasPlaying = isPlaying;
+  const savedTime = masterTime;
+  if (wasPlaying) pausePlayback();
+
+  await detectBestBackendServer();
+  updatePlaybackTunerBadges();
+
+  if (!projectState?.track_a) return;
+
+  let urlA = "";
+  let urlB = "";
+  if (resolvedBackendBaseUrl === "CLOUD" || currentVideoQuality === "360p") {
+    if (resolvedBackendBaseUrl === "CLOUD") {
+      urlA = "./cloud_media/track_a.mp4";
+      urlB = "./cloud_media/track_b.mp4";
+    } else {
+      urlA = `${resolvedBackendBaseUrl}/api/stream/A?pw=leelai&quality=360p`;
+      urlB = `${resolvedBackendBaseUrl}/api/stream/B?pw=leelai&quality=360p`;
+    }
+  } else {
+    urlA = `${resolvedBackendBaseUrl}/api/stream/A?pw=leelai&quality=${currentVideoQuality}`;
+    urlB = `${resolvedBackendBaseUrl}/api/stream/B?pw=leelai&quality=${currentVideoQuality}`;
+  }
+
+  projectState.track_a.media_url = urlA;
+  if (projectState.track_b) projectState.track_b.media_url = urlB;
+
+  if (el.videoA.getAttribute("src") !== urlA) {
+    el.videoA.src = urlA;
+    el.videoA.load();
+  }
+  if (projectState.track_b && el.videoB.getAttribute("src") !== urlB) {
+    el.videoB.src = urlB;
+    el.videoB.load();
+  }
+
+  if (preservePlayhead) {
+    const restoreSeek = () => {
+      syncVideosToMasterTime(savedTime, true);
+      if (wasPlaying) startPlayback();
+    };
+    if (el.videoA.readyState >= 1) {
+      restoreSeek();
+    } else {
+      el.videoA.addEventListener("loadedmetadata", restoreSeek, { once: true });
+    }
+  }
+}
+
+function initPlaybackTunerUI() {
+  const btnPopover = document.getElementById("btnTogglePlaybackPopover");
+  const popover = document.getElementById("playbackSettingsPopover");
+  if (btnPopover && popover) {
+    btnPopover.addEventListener("click", () => {
+      const hidden = popover.classList.toggle("hidden");
+      btnPopover.classList.toggle("active", !hidden);
+    });
+  }
+
+  document.querySelectorAll("#qualityPillRow .tuner-pill").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const q = btn.getAttribute("data-quality") || "540p";
+      currentVideoQuality = q;
+      localStorage.setItem("dualsync_video_quality", q);
+      if (streamSourceMode === "cloud" && q !== "360p") {
+        streamSourceMode = "auto";
+        localStorage.setItem("dualsync_stream_source", "auto");
+      }
+      await applyMediaStreamSettings(true);
+    });
+  });
+
+  document.getElementById("selectSyncEngineMode")?.addEventListener("change", (e) => {
+    syncEngineMode = e.target.value || "free_run";
+    localStorage.setItem("dualsync_sync_engine", syncEngineMode);
+    lastUiPov = "";
+    syncVideosToMasterTime(masterTime, true);
+  });
+
+  document.getElementById("sliderDriftTolerance")?.addEventListener("input", (e) => {
+    driftToleranceSec = parseFloat(e.target.value) || 0.55;
+    localStorage.setItem("dualsync_drift_tol", String(driftToleranceSec));
+    const lbl = document.getElementById("labelDriftTolerance");
+    if (lbl) lbl.textContent = `${driftToleranceSec.toFixed(2)}s`;
+  });
+
+  document.querySelectorAll("#speedPillRow .tuner-pill").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      userPlaybackSpeed = parseFloat(btn.getAttribute("data-speed")) || 1.0;
+      const ma = document.getElementById("masterAudio");
+      const da = document.getElementById("desktopAudio");
+      if (ma) ma.playbackRate = userPlaybackSpeed;
+      if (da) da.playbackRate = userPlaybackSpeed;
+      if (el.videoA) el.videoA.playbackRate = userPlaybackSpeed;
+      if (el.videoB) el.videoB.playbackRate = userPlaybackSpeed;
+      updatePlaybackTunerBadges();
+    });
+  });
+
+  document.getElementById("selectStreamSource")?.addEventListener("change", async (e) => {
+    streamSourceMode = e.target.value || "auto";
+    localStorage.setItem("dualsync_stream_source", streamSourceMode);
+    await applyMediaStreamSettings(true);
+  });
+
+  document.getElementById("btnForceResyncNow")?.addEventListener("click", () => {
+    syncVideosToMasterTime(masterTime, true);
+  });
+
+  updatePlaybackTunerBadges();
+}
+
 // INIT
 (async function initStudio() {
+  initPlaybackTunerUI();
+  await detectBestBackendServer();
   // Client-side password check on static cloud hosting (?pw=leelai)
   if (IS_STATIC_CLOUD) {
     const params = new URLSearchParams(window.location.search);
@@ -2682,6 +3021,16 @@ document.getElementById("btnImportYoutube")?.addEventListener("click", async () 
   }
 
   if (state) {
+    if (state.track_a && state.track_b) {
+      if (resolvedBackendBaseUrl === "CLOUD") {
+        state.track_a.media_url = "./cloud_media/track_a.mp4";
+        state.track_b.media_url = "./cloud_media/track_b.mp4";
+      } else {
+        state.track_a.media_url = `${resolvedBackendBaseUrl}/api/stream/A?pw=leelai&quality=${currentVideoQuality}`;
+        state.track_b.media_url = `${resolvedBackendBaseUrl}/api/stream/B?pw=leelai&quality=${currentVideoQuality}`;
+      }
+    }
+    updatePlaybackTunerBadges();
     (state.highlights || []).forEach((h) => {
       if (h.thumbnail_url && h.thumbnail_url.startsWith("/thumbnails/")) {
         h.thumbnail_url = "." + h.thumbnail_url;
