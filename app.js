@@ -887,35 +887,46 @@ function syncVideosToMasterTime(t, forceSeek = false) {
   updatePlaybackTelemetry(timeA, timeB);
 }
 
+let prevTickMasterTime = 366.0;
+
 function tickPlayback() {
   if (!isPlaying) return;
 
+  const prevT = masterTime;
   const ma = document.getElementById("masterAudio");
   if (hasMasterCoopAudio() && ma && !ma.paused) {
     masterTime = ma.currentTime;
   } else if (projectState?.track_a && !el.videoA.paused) {
     masterTime = el.videoA.currentTime;
   } else {
-    masterTime += 1 / 60;
+    masterTime += (1 / 60) * (userPlaybackSpeed || 1.0);
   }
 
-  // Handle "Play Edited Story Reel Only" preview mode
+  // Handle "Play Edited Story Reel Only" preview mode:
+  // Only jump to the next scene when playback naturally reaches the end of the scene it was playing in!
+  // Never teleport forward if the user manually clicked in a lead-in/lead-out area.
   if (el.chkPlayHighlightsOnly.checked && projectState?.highlights?.length) {
     const enabled = projectState.highlights.filter((h) => h.enabled);
     if (enabled.length > 0) {
-      const inside = enabled.find((h) => masterTime >= h.start_sec - 0.08 && masterTime <= h.end_sec + 0.05);
-      if (!inside) {
-        const nextHl = enabled.find((h) => h.start_sec > masterTime) || enabled[0];
-        if (nextHl === enabled[0] && masterTime > enabled[enabled.length - 1].end_sec) {
+      const justFinishedScene = enabled.find(
+        (h) => prevT >= h.start_sec - 0.15 && prevT <= h.end_sec + 0.15 && masterTime >= h.end_sec
+      );
+      if (justFinishedScene) {
+        const nextHl = enabled.find((h) => h.start_sec > justFinishedScene.end_sec - 0.1) || enabled[0];
+        if (nextHl === enabled[0] && justFinishedScene === enabled[enabled.length - 1]) {
           pausePlayback();
           syncVideosToMasterTime(enabled[0].start_sec, true);
           return;
         }
         syncVideosToMasterTime(nextHl.start_sec, true);
+        prevTickMasterTime = masterTime;
+        rafId = requestAnimationFrame(tickPlayback);
+        return;
       }
     }
   }
 
+  prevTickMasterTime = masterTime;
   const maxDur = getMasterDuration();
   if (masterTime >= maxDur - 0.05) {
     pausePlayback();
@@ -931,17 +942,7 @@ function startPlayback() {
   initWebAudioVoiceMixer();
   isPlaying = true;
   el.btnPlayPause.textContent = "⏸ Pause";
-
-  if (el.chkPlayHighlightsOnly.checked && projectState?.highlights?.length) {
-    const enabled = projectState.highlights.filter((h) => h.enabled);
-    if (enabled.length > 0) {
-      const inside = enabled.find((h) => masterTime >= h.start_sec - 0.08 && masterTime <= h.end_sec);
-      if (!inside) {
-        const nextHl = enabled.find((h) => h.start_sec > masterTime) || enabled[0];
-        syncVideosToMasterTime(nextHl.start_sec, true);
-      }
-    }
-  }
+  prevTickMasterTime = masterTime;
 
   const baseRate = userPlaybackSpeed || 1.0;
   const ma = document.getElementById("masterAudio");
@@ -1230,11 +1231,27 @@ function getTimelineWindow() {
   };
 }
 
+function getTrackLaneRect() {
+  if (el.directorTrackLane) {
+    const r = el.directorTrackLane.getBoundingClientRect();
+    if (r.width > 0) return r;
+  }
+  return el.rulerCanvas.getBoundingClientRect();
+}
+
 function updatePlayheadPosition() {
   const laneW = getLaneWidthPx();
   const { winStart, winDur } = getTimelineWindow();
-  const rel = (masterTime - winStart) / winDur;
-  const x = LABEL_WIDTH + Math.max(0, Math.min(1.0, rel)) * laneW;
+  const rel = Math.max(0, Math.min(1.0, (masterTime - winStart) / winDur));
+  let leftOffset = LABEL_WIDTH;
+  if (el.directorTrackLane && el.timelineStage) {
+    const lRect = el.directorTrackLane.getBoundingClientRect();
+    const sRect = el.timelineStage.getBoundingClientRect();
+    if (lRect.width > 0 && sRect.width > 0) {
+      leftOffset = lRect.left - sRect.left;
+    }
+  }
+  const x = leftOffset + rel * laneW;
   el.playheadLine.style.left = `${x}px`;
 }
 
@@ -1254,7 +1271,6 @@ function startSceneEdgeDrag(e, hl, edge) {
   e.preventDefault();
   e.stopPropagation();
   pausePlayback();
-  const laneW = getLaneWidthPx();
   const totalDur = getMasterDuration();
   lockedTimelineWindow = getTimelineWindow();
   const { winStart, winDur } = lockedTimelineWindow;
@@ -1262,9 +1278,10 @@ function startSceneEdgeDrag(e, hl, edge) {
   const origEnd = hl.end_sec;
 
   const onMove = (moveEvt) => {
-    const rect = el.rulerCanvas.getBoundingClientRect();
-    const relX = Math.max(0, Math.min(laneW, moveEvt.clientX - rect.left));
-    const sec = Number((winStart + (relX / laneW) * winDur).toFixed(2));
+    const rect = getTrackLaneRect();
+    const effW = Math.max(1, rect.width);
+    const relX = Math.max(0, Math.min(effW, moveEvt.clientX - rect.left));
+    const sec = Number((winStart + (relX / effW) * winDur).toFixed(2));
 
     if (edge === "in") {
       const clampedIn = Math.max(0, Math.min(hl.end_sec - 2.0, sec));
@@ -1317,14 +1334,14 @@ function startCutBoundaryDrag(e, hl, leftCut, rightCut) {
   e.preventDefault();
   e.stopPropagation();
   pausePlayback();
-  const laneW = getLaneWidthPx();
   lockedTimelineWindow = getTimelineWindow();
   const { winStart, winDur } = lockedTimelineWindow;
 
   const onMove = (moveEvt) => {
-    const rect = el.rulerCanvas.getBoundingClientRect();
-    const relX = Math.max(0, Math.min(laneW, moveEvt.clientX - rect.left));
-    const sec = Number((winStart + (relX / laneW) * winDur).toFixed(2));
+    const rect = getTrackLaneRect();
+    const effW = Math.max(1, rect.width);
+    const relX = Math.max(0, Math.min(effW, moveEvt.clientX - rect.left));
+    const sec = Number((winStart + (relX / effW) * winDur).toFixed(2));
     const minSec = leftCut.start_sec + 0.8;
     const maxSec = rightCut.end_sec - 0.8;
     const clamped = Math.max(minSec, Math.min(maxSec, sec));
@@ -1446,14 +1463,9 @@ function renderTimeline() {
         ${cWidth > 70 ? `<span class="cut-pov-pill" title="Click to switch POV">🎥</span>` : ""}
       `;
 
-      block.addEventListener("mousedown", (e) => {
-        if (e.target.classList.contains("cut-pov-pill")) return;
-        e.stopPropagation();
-        syncVideosToMasterTime(cut.start_sec + 0.05, true);
-      });
-
       const pill = block.querySelector(".cut-pov-pill");
       if (pill) {
+        pill.addEventListener("mousedown", (e) => e.stopPropagation());
         pill.addEventListener("click", async (e) => {
           e.stopPropagation();
           const order = ["A", "SPLIT", "B"];
@@ -1617,14 +1629,37 @@ function drawWindowedWaveform(canvas, laneW, win, envSamples5Hz, overviewSamples
   }
 }
 
-// TIMELINE SCRUBBING
-function handleTimelineClick(e) {
-  const rect = el.rulerCanvas.getBoundingClientRect();
-  const relX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
-  const laneW = getLaneWidthPx();
-  const { winStart, winDur } = getTimelineWindow();
-  const targetSec = winStart + (relX / laneW) * winDur;
+// TIMELINE SCRUBBING (1:1 Mouse-to-Playhead Lock + Click-and-Drag Scrubbing)
+function seekTimelineAtClientX(clientX, win) {
+  const rect = getTrackLaneRect();
+  const effW = Math.max(1, rect.width);
+  const relX = Math.max(0, Math.min(effW, clientX - rect.left));
+  const { winStart, winDur } = win || getTimelineWindow();
+  const targetSec = winStart + (relX / effW) * winDur;
   syncVideosToMasterTime(targetSec, true);
+}
+
+function startTimelineScrub(e) {
+  if (
+    e.target.classList.contains("scene-trim-handle") ||
+    e.target.classList.contains("cut-boundary-handle") ||
+    e.target.classList.contains("cut-pov-pill")
+  ) {
+    return;
+  }
+  lockedTimelineWindow = getTimelineWindow();
+  seekTimelineAtClientX(e.clientX, lockedTimelineWindow);
+
+  const onMove = (moveEvt) => {
+    seekTimelineAtClientX(moveEvt.clientX, lockedTimelineWindow);
+  };
+  const onUp = () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+    lockedTimelineWindow = null;
+  };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
 }
 
 [
@@ -1637,7 +1672,7 @@ function handleTimelineClick(e) {
 ].forEach((node) => {
   if (!node) return;
   node.addEventListener("mousedown", (e) => {
-    handleTimelineClick(e);
+    startTimelineScrub(e);
   });
 });
 
@@ -2299,13 +2334,24 @@ el.viewportB.addEventListener("click", () => {
   if (el.viewportB.classList.contains("pip-mate")) cyclePovAtPlayhead();
 });
 
-// Frame.io Scrubber click-to-seek
+// Frame.io Scrubber click-and-drag 1:1 seek
 const fioScrubberTrack = document.getElementById("fioScrubberTrack");
 if (fioScrubberTrack) {
-  fioScrubberTrack.addEventListener("click", (e) => {
+  const seekOverviewBarAtClientX = (clientX) => {
     const rect = fioScrubberTrack.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / Math.max(1, rect.width)));
     syncVideosToMasterTime(ratio * getMasterDuration(), true);
+  };
+  fioScrubberTrack.addEventListener("mousedown", (e) => {
+    if (e.target.classList.contains("scrubber-comment-pin")) return;
+    seekOverviewBarAtClientX(e.clientX);
+    const onMove = (moveEvt) => seekOverviewBarAtClientX(moveEvt.clientX);
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
   });
 }
 
@@ -2758,6 +2804,9 @@ function updatePlaybackTunerBadges() {
   document.querySelectorAll("#speedPillRow .tuner-pill").forEach((btn) => {
     btn.classList.toggle("active", parseFloat(btn.getAttribute("data-speed")) === userPlaybackSpeed);
   });
+  document.querySelectorAll("#quickTransportSpeedRow .spd-pill").forEach((btn) => {
+    btn.classList.toggle("active", parseFloat(btn.getAttribute("data-speed")) === userPlaybackSpeed);
+  });
 
   const selSync = document.getElementById("selectSyncEngineMode");
   if (selSync) selSync.value = syncEngineMode;
@@ -2858,16 +2907,26 @@ function initPlaybackTunerUI() {
     if (lbl) lbl.textContent = `${driftToleranceSec.toFixed(2)}s`;
   });
 
+  function setPlaybackSpeed(spd) {
+    userPlaybackSpeed = parseFloat(spd) || 1.0;
+    const ma = document.getElementById("masterAudio");
+    const da = document.getElementById("desktopAudio");
+    if (ma) ma.playbackRate = userPlaybackSpeed;
+    if (da) da.playbackRate = userPlaybackSpeed;
+    if (el.videoA) el.videoA.playbackRate = userPlaybackSpeed;
+    if (el.videoB) el.videoB.playbackRate = userPlaybackSpeed;
+    updatePlaybackTunerBadges();
+  }
+
   document.querySelectorAll("#speedPillRow .tuner-pill").forEach((btn) => {
     btn.addEventListener("click", () => {
-      userPlaybackSpeed = parseFloat(btn.getAttribute("data-speed")) || 1.0;
-      const ma = document.getElementById("masterAudio");
-      const da = document.getElementById("desktopAudio");
-      if (ma) ma.playbackRate = userPlaybackSpeed;
-      if (da) da.playbackRate = userPlaybackSpeed;
-      if (el.videoA) el.videoA.playbackRate = userPlaybackSpeed;
-      if (el.videoB) el.videoB.playbackRate = userPlaybackSpeed;
-      updatePlaybackTunerBadges();
+      setPlaybackSpeed(btn.getAttribute("data-speed"));
+    });
+  });
+
+  document.querySelectorAll("#quickTransportSpeedRow .spd-pill").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setPlaybackSpeed(btn.getAttribute("data-speed"));
     });
   });
 

@@ -901,8 +901,10 @@ body {
 }
 .ruler-canvas {
   display: block;
+  margin-left: 140px;
   background: #0e1118;
   border-bottom: 1px solid var(--border);
+  cursor: pointer;
 }
 .track-row {
   display: flex;
@@ -2059,4 +2061,37 @@ body {
 .telem-chip.telem-warn {
   border-color: rgba(251, 191, 36, 0.55);
   color: #fde68a;
+}
+
+/* QUICK TRANSPORT SPEED PILLS (1x / 1.5x / 2x) */
+.transport-speed-pills {
+  display: inline-flex;
+  align-items: center;
+  background: #0b0e17;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.spd-pill {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 7px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.spd-pill:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+.spd-pill.active {
+  background: var(--fio-indigo);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.45);
 }

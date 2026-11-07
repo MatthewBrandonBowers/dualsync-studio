@@ -170,11 +170,16 @@
 
       <!-- DAVINCI CUT-PAGE CONTROL DECK: TRANSPORT + LIVE BROADCAST CAMERA SWITCHER + TOOLS -->
       <div class="fio-controls-bar pro-switcher-deck">
-        <!-- LEFT: TRANSPORT & TIMECODE -->
+        <!-- LEFT: TRANSPORT, SPEED (1x / 1.5x / 2x) & TIMECODE -->
         <div class="transport-cluster">
           <button id="btnPrevScene" class="btn btn-icon" title="Previous Scene">⏮</button>
           <button id="btnPlayPause" class="btn btn-play-main" title="Play / Pause (Space)">▶ Play</button>
           <button id="btnNextScene" class="btn btn-icon" title="Next Scene">⏭</button>
+          <div class="transport-speed-pills" id="quickTransportSpeedRow" title="Playback Speed (1x / 1.5x / 2x)">
+            <button type="button" class="spd-pill active" data-speed="1">1x</button>
+            <button type="button" class="spd-pill" data-speed="1.5">1.5x</button>
+            <button type="button" class="spd-pill" data-speed="2">2x</button>
+          </div>
           <div id="masterTimecode" class="fio-timecode">00:06:06.00</div>
           <span id="activeSceneRangeLabel" class="scene-len-pill" title="Current Scene Duration">35.0s</span>
           <button id="btnPrevCut" class="btn btn-ghost btn-xs" title="Previous Camera Cut ([)">◀ Cut</button>
